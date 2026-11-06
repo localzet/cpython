@@ -1,0 +1,37 @@
+name: Record experiment
+
+on:
+  push:
+    branches:
+      - experimental/record-type-research
+    paths:
+      - 'Tools/experiments/record/**'
+      - '.github/workflows/localzet-record-research.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prototype:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.13', '3.14']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile and test
+        run: |
+          python -m compileall -q Tools/experiments/record
+          cd Tools/experiments/record
+          python -m unittest discover -s . -p 'test_*.py' -v
+      - name: Benchmark smoke test
+        run: |
+          cd Tools/experiments/record
+          python bench.py --number 1000 --repeat 3 --instances 500
