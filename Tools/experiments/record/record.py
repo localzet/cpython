@@ -1,62 +1,95 @@
-"""Research prototype for fixed-shape objects with explicit mapping validation."""
+"""Experimental fixed-shape records with explicit boundary validation.
+
+This is a research prototype, not a proposed standard-library API.
+"""
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import MISSING, dataclass, field, fields
 from functools import lru_cache
 from types import UnionType
 from typing import (
-    Any, Callable, Literal, TypeVar, Union, dataclass_transform,
-    get_args, get_origin, get_type_hints, overload,
+    Any, Literal, Self, TypeVar, Union, dataclass_transform, get_args,
+    get_origin, get_type_hints, overload,
 )
 
 T = TypeVar("T", bound=type)
 _RESERVED = frozenset(("from_mapping", "to_mapping"))
+_EXACT_TYPES = (bool, int, float, str, bytes)
 
 
 class RecordValidationError(TypeError):
-    """A mapping value does not match its record schema."""
+    """Input did not satisfy a record's declared fields."""
 
 
 def _type_name(annotation: object) -> str:
     return getattr(annotation, "__name__", str(annotation))
 
 
-def _valid(value: object, annotation: object) -> bool:
-    """Check a deliberately limited annotation subset without coercion."""
-    if annotation is Any or annotation is object:
-        return True
-    if annotation is None or annotation is type(None):
-        return value is None
+def _fail(path: str, expected: object, value: object) -> None:
+    raise RecordValidationError(
+        f"{path}: expected {_type_name(expected)}, got "
+        f"{type(value).__name__}")
 
+
+def _check(value: object, annotation: object, path: str) -> None:
+    """Validate a deliberately narrow, non-coercing annotation subset."""
+    if annotation is Any or annotation is object:
+        return
+    if annotation is None or annotation is type(None):
+        if value is None:
+            return
+        _fail(path, type(None), value)
     origin = get_origin(annotation)
     args = get_args(annotation)
     if origin in (Union, UnionType):
-        return any(_valid(value, option) for option in args)
+        for alternative in args:
+            try:
+                _check(value, alternative, path)
+            except RecordValidationError:
+                continue
+            else:
+                return
+        _fail(path, annotation, value)
     if origin is Literal:
-        return any(type(value) is type(item) and value == item
-                   for item in args)
+        if any(type(value) is type(item) and value == item
+               for item in args):
+            return
+        _fail(path, annotation, value)
     if origin is list:
-        return isinstance(value, list) and (
-            not args or all(_valid(item, args[0]) for item in value))
+        if not isinstance(value, list):
+            _fail(path, annotation, value)
+        if args:
+            for index, item in enumerate(value):
+                _check(item, args[0], f"{path}[{index}]")
+        return
     if origin is dict:
-        return isinstance(value, dict) and (
-            not args or all(_valid(k, args[0]) and _valid(v, args[1])
-                            for k, v in value.items()))
+        if not isinstance(value, dict):
+            _fail(path, annotation, value)
+        if args:
+            for key, item in value.items():
+                _check(key, args[0], f"{path}.<key>")
+                _check(item, args[1], f"{path}[{key!r}]")
+        return
     if origin is tuple:
         if not isinstance(value, tuple):
-            return False
+            _fail(path, annotation, value)
         if not args:
-            return True
+            return
         if len(args) == 2 and args[1] is Ellipsis:
-            return all(_valid(item, args[0]) for item in value)
-        return len(args) == len(value) and all(
-            _valid(item, expected)
-            for item, expected in zip(value, args))
+            for index, item in enumerate(value):
+                _check(item, args[0], f"{path}[{index}]")
+            return
+        if len(value) != len(args):
+            _fail(path, annotation, value)
+        for index, (item, expected) in enumerate(zip(value, args)):
+            _check(item, expected, f"{path}[{index}]")
+        return
     if isinstance(annotation, type):
-        # bool is a subclass of int; reject it for int schema fields.
-        if annotation in (bool, int, float, str, bytes):
-            return type(value) is annotation
-        return isinstance(value, annotation)
+        if (type(value) is annotation if annotation in _EXACT_TYPES
+                else isinstance(value, annotation)):
+            return
+        _fail(path, annotation, value)
     raise TypeError(f"Unsupported annotation {_type_name(annotation)}")
 
 
@@ -70,56 +103,63 @@ def _schema(cls: type) -> tuple[tuple[str, object, bool], ...]:
     )
 
 
-def _from_mapping(cls: type, data: Any):
-    from collections.abc import Mapping
-    if not isinstance(data, Mapping):
-        raise RecordValidationError(f"{cls.__name__}: expected a mapping")
-    schema = _schema(cls)
-    names = {name for name, _, _ in schema}
-    unexpected = set(data) - names
-    if unexpected:
-        raise RecordValidationError(
-            f"{cls.__name__}: unknown fields {sorted(map(repr, unexpected))!r}")
-    missing = [name for name, _, required in schema
-               if required and name not in data]
-    if missing:
-        raise RecordValidationError(
-            f"{cls.__name__}: missing fields {missing!r}")
-    for name, annotation, _ in schema:
-        if name in data and not _valid(data[name], annotation):
+class Record:
+    """Explicitly inherited API so static analyzers can resolve methods."""
+
+    __slots__ = ()
+
+    @classmethod
+    def from_mapping(cls: type[Self], data: Mapping[str, object]) -> Self:
+        if not isinstance(data, Mapping):
+            raise RecordValidationError(f"{cls.__name__}: expected a mapping")
+        schema = _schema(cls)
+        names = {name for name, _, _ in schema}
+        unexpected = set(data) - names
+        if unexpected:
             raise RecordValidationError(
-                f"{cls.__name__}.{name}: expected {_type_name(annotation)}, "
-                f"got {type(data[name]).__name__}")
-    return cls(**data)
+                f"{cls.__name__}: unknown fields "
+                f"{sorted(map(repr, unexpected))!r}")
+        missing = [name for name, _, required in schema
+                   if required and name not in data]
+        if missing:
+            raise RecordValidationError(
+                f"{cls.__name__}: missing fields {missing!r}")
+        for name, annotation, _ in schema:
+            if name in data:
+                _check(data[name], annotation, f"{cls.__name__}.{name}")
+        # Dataclasses do not automatically perform runtime type checks.
+        return cls(**data)
 
-
-def _to_mapping(self: object) -> dict[str, object]:
-    return {f.name: getattr(self, f.name) for f in fields(self)}
+    def to_mapping(self) -> dict[str, object]:
+        """Return a *shallow* mapping of field names to values."""
+        return {f.name: getattr(self, f.name) for f in fields(self)}
 
 
 @overload
-def record(cls: T, *, frozen: bool = False) -> T: ...
+def record(cls: T, /, *, frozen: bool = False) -> T: ...
 
 
 @overload
-def record(cls: None = None, *, frozen: bool = False) -> Callable[[T], T]: ...
+def record(cls: None = None, /, *, frozen: bool = False
+           ) -> Callable[[T], T]: ...
 
 
 @dataclass_transform(kw_only_default=True, field_specifiers=(field,))
-def record(cls: T | None = None, *, frozen: bool = False):
-    """Slotted dataclass plus validated from_mapping and shallow to_mapping.
+def record(cls: T | None = None, /, *, frozen: bool = False
+           ) -> T | Callable[[T], T]:
+    """A slotted dataclass with the explicit Record mapping boundary.
 
-    Direct construction and assignment deliberately do not validate types.
+    Callers must inherit Record. Direct construction and subsequent assignment
+    intentionally do not validate types. from_mapping() does.
     """
     def decorate(target: T) -> T:
-        annotations = getattr(target, "__annotations__", {})
+        if not issubclass(target, Record):
+            raise TypeError("Records must inherit Record")
         collisions = _RESERVED & (
-            set(annotations) | set(vars(target)))
+            set(getattr(target, "__annotations__", {})) | set(vars(target)))
         if collisions:
             raise TypeError(
                 f"Reserved record field/method name: {sorted(collisions)!r}")
-        setattr(target, "from_mapping", classmethod(_from_mapping))
-        setattr(target, "to_mapping", _to_mapping)
         return dataclass(slots=True, kw_only=True, frozen=frozen)(target)
 
     return decorate(cls) if cls is not None else decorate
