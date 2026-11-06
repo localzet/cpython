@@ -62,14 +62,16 @@ def compare_metadata(left: SchemaMeta, right: SchemaMeta) -> Comparison:
         if a.default_kind != b.default_kind:
             add("defaults", name, "uncertain",
                 "Omitted TypedDict keys are not model defaults")
-        if (a.static_readonly is not None and b.static_readonly is not None
-                and a.static_readonly != b.static_readonly):
+        elif (left.model is not right.model
+              and a.default_kind in ("value", "factory")):
+            add("opaque_default", name, "uncertain",
+                "Metadata records the default kind, not its actual value")
+        if a.static_readonly != b.static_readonly:
             add("static_readonly", name, "uncertain",
-                "Static field mutability metadata differs")
-        if (a.assignment_frozen is not None and b.assignment_frozen is not None
-                and a.assignment_frozen != b.assignment_frozen):
+                "A readonly guarantee differs or is unknown to one provider")
+        if a.assignment_frozen != b.assignment_frozen:
             add("assignment_frozen", name, "uncertain",
-                "Runtime field assignment constraints differ")
+                "Runtime assignment constraints differ or are unknown")
         if a.init != b.init:
             add("init", name, "uncertain",
                 "Field participation in initialization differs")
