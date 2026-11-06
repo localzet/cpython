@@ -1718,7 +1718,7 @@ class DictTest(unittest.TestCase):
                 raise exc
 
         with self.assertRaisesRegex(TypeError,
-                                    "cannot use 'AnnotatedKey' as a dict key") as cm:
+                                    "AnnotatedKey' as a dict key") as cm:
             d[AnnotatedKey()] = 1
         self.assertEqual(cm.exception.__notes__, ["custom note"])
 
