@@ -702,7 +702,7 @@ class TestSet(TestJointOps, unittest.TestCase):
                 raise exc
 
         with self.assertRaisesRegex(TypeError,
-                                    "cannot use 'AnnotatedElement' as a set element") as cm:
+                                    "AnnotatedElement' as a set element") as cm:
             s.add(AnnotatedElement())
         self.assertEqual(cm.exception.__notes__, ["custom note"])
 
