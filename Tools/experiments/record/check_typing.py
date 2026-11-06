@@ -35,7 +35,7 @@ def verify_mypy():
         raise AssertionError(f"mypy negative exit code {bad}:\n{output}")
     diagnosed = {
         int(match.group(1))
-        for match in re.finditer(r"negative\.py:(\d+):\d+: error:", output)
+        for match in re.finditer(r"negative\.py:(\d+)(?::\d+)?: error:", output)
     }
     missing = set(EXPECTED) - diagnosed
     if missing:
