@@ -1,6 +1,4 @@
 """Metadata extraction tests: distinguish known facts from unknown behavior."""
-from __future__ import annotations
-
 import unittest
 from dataclasses import dataclass, field
 from typing import Annotated, NotRequired, ReadOnly, Required, TypedDict
