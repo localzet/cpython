@@ -12,12 +12,12 @@ def report(old, new, direction):
                              direction=direction)
 
 class RealWorldChangeTests(unittest.TestCase):
-    def test_fastapi_annotation_change_requires_review(self):
+    def test_fastapi_annotation_narrowing_found(self):
         result = report(FastAPISchemaOld, FastAPISchemaNew, "input")
-        self.assertEqual(result.verdict, "review_required")
-        self.assertIn("annotation_changed", {i.code for i in result.issues})
+        self.assertEqual(result.verdict, "breaking_detected")
+        self.assertIn("declared_type_narrowed", {i.code for i in result.issues})
 
-    def test_fastapi_narrowing_witness_not_detected_as_definite(self):
+    def test_fastapi_narrowing_witness_agrees_with_warning(self):
         sample = {"type": "custom-extension"}
         self.assertEqual(FastAPISchemaOld.model_validate(sample).type,
                          "custom-extension")
@@ -28,7 +28,7 @@ class RealWorldChangeTests(unittest.TestCase):
                          ["string", "null"])
         with self.assertRaises(ValidationError):
             FastAPISchemaOld.model_validate(new_only)
-        self.assertNotEqual(
+        self.assertEqual(
             report(FastAPISchemaOld, FastAPISchemaNew, "input").verdict,
             "breaking_detected")
 

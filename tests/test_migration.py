@@ -159,10 +159,19 @@ class MigrationTests(unittest.TestCase):
         r = report(OldLiteral, NewLiteralNarrow, "output")
         self.assertIn("literal_set_relaxed", codes(r))
 
-    def test_unproven_type_subtyping_not_assumed(self):
+    def test_disjoint_primitive_declared_type_has_witness(self):
         r = report(OldId, NewIdString, "input")
-        self.assertIn("annotation_changed", codes(r))
+        self.assertIn("declared_type_narrowed", codes(r))
         self.assertNotIn("literal_set_contract", codes(r))
+        self.assertEqual(r.verdict, "breaking_detected")
+
+    def test_unsupported_generic_annotation_change_requires_review(self):
+        class Old(TypedDict):
+            values: set[int]
+        class New(TypedDict):
+            values: set[str]
+        r = report(Old, New, "input")
+        self.assertIn("annotation_changed", codes(r))
         self.assertEqual(r.verdict, "review_required")
 
     def test_extra_policy_change_requires_review(self):
