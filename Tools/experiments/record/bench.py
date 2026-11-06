@@ -12,7 +12,7 @@ import tracemalloc
 from dataclasses import dataclass
 from typing import NamedTuple, TypedDict
 
-from record import record
+from record import Record, record
 
 
 class UserDict(TypedDict):
@@ -58,7 +58,7 @@ class NamedUser(NamedTuple):
 
 
 @record
-class RecordUser:
+class RecordUser(Record):
     id: int
     name: str
     active: bool = True
