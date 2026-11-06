@@ -27,9 +27,8 @@ Operations recorded in raw JSON as separate groups:
    validate on ordinary construction and others do not. **Not** the main
    cross-library comparison.
 2. read_field — access the f0 attribute or dict key on an existing object.
-3. equality — compare an existing object with a newly created same-type
-   instance; the cost of constructing the RHS is therefore INCLUDED and
-   this group must not be interpreted as pure equality performance.
+3. equality — compare two pre-created, equal objects of the same type;
+   construction is excluded from the timed operation.
 4. validated_mapping — check an existing Python mapping and construct the
    declared type (manual checks + slotted dataclass, Record.from_mapping,
    validated attrs constructor, msgspec.convert, Pydantic.model_validate).
@@ -38,9 +37,9 @@ Operations recorded in raw JSON as separate groups:
 6. json_encode — object to UTF-8 JSON bytes. All outputs are checked to
    decode back to the original mapping; serialization internals differ.
 
-The current equality operation is a **combined construct-and-compare** test
-and should be revised to pure equality before being used for absolute
-equality-performance claims. This is deliberately documented.
+All objects used for access and equality are prepared outside the timed
+operation. The equality cases exercise each type's generated equality method
+(or mapping equality), not object construction.
 
 For each operation, timeit performs 100 warm-up calls and repeated
 number=2000 timings; the median/min/max per operation are recorded in ns.

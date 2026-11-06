@@ -114,6 +114,7 @@ def build_cases(size: int):
             data_json, strict=True),
     }
     objects = {label: make() for label, make in constructors.items()}
+    peers = {label: make() for label, make in constructors.items()}
     # All serializers return UTF-8 JSON bytes. Object-to-bytes is measured.
     serializers = {
         "dict": lambda: json.dumps(
@@ -148,7 +149,7 @@ def build_cases(size: int):
             for label, obj in objects.items()
         },
         "equality": {
-            label: (lambda obj=obj, make=constructors[label]: obj == make())
+            label: (lambda obj=obj, peer=peers[label]: obj == peer)
             for label, obj in objects.items()
         },
         "validated_mapping": {
