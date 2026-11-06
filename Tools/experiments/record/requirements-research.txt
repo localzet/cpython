@@ -1,5 +1,0 @@
-attrs==26.1.0
-msgspec==0.22.0
-pydantic==2.14.3
-mypy==2.4.1
-pyright==1.1.414

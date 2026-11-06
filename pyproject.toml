@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "localzet-schema-compat"
+version = "0.1.0.dev0"
+description = "Conservative directional migration risk analysis across Python data model schemas"
+readme = "README.md"
+requires-python = ">=3.13"
+authors = [{name = "localzet"}]
+keywords = ["schema", "migration", "typeddict", "dataclass", "pydantic"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Typing :: Typed",
+]
+dependencies = []
+
+[project.optional-dependencies]
+attrs = ["attrs>=24,<27"]
+pydantic = ["pydantic>=2.10,<3"]
+msgspec = ["msgspec>=0.19,<1"]
+all = ["attrs>=24,<27", "pydantic>=2.10,<3", "msgspec>=0.19,<1"]
+dev = ["pytest>=8,<10", "mypy>=1.15,<3", "pyright>=1.1.390,<2", "build>=1.2,<2"]
+
+[project.scripts]
+schema-compat = "schema_compat.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["schema_compat*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
