@@ -90,6 +90,7 @@ def compare_metadata(left: SchemaMeta, right: SchemaMeta) -> Comparison:
         add("frozen", "$", "uncertain",
             "Runtime freezing differs; it is not TypedDict ReadOnly")
 
-    verdict = ("different" if any(f.severity == "difference" for f in findings)
-               else "inconclusive" if findings else "metadata_match")
+    verdict: Literal["different", "inconclusive", "metadata_match"] = (
+        "different" if any(f.severity == "difference" for f in findings)
+        else "inconclusive" if findings else "metadata_match")
     return Comparison(tuple(findings), verdict)
