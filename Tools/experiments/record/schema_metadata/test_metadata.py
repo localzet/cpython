@@ -225,7 +225,7 @@ class SchemaMetadataTests(unittest.TestCase):
         self.assertIn("requiredness", codes)
         self.assertIn("defaults", codes)
         self.assertIn("representation", codes)
-        self.assertIn("validation", codes)
+        self.assertIn("extras", codes)
 
     def test_compare_aliases_inconclusive(self):
         @dataclass
