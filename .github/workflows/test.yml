@@ -1,0 +1,87 @@
+name: Schema compatibility standalone
+
+on:
+  push:
+    branches: [experimental/schema-compat-standalone]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: schema-compat-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  behavior:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.13', '3.14']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install package and providers
+        run: python -m pip install -e '.[all,dev]'
+      - name: Test library and real-world field reconstructions
+        run: |
+          python -m compileall -q src tests
+          python -m unittest discover -s tests -p 'test_*.py' -v
+
+  typing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -e '.[all,dev]'
+      - run: python tools/check_typing.py
+      - name: Type check implementation
+        run: |
+          python -m mypy --strict src/schema_compat/migration.py src/schema_compat/cli.py
+          pyright src/schema_compat/migration.py src/schema_compat/cli.py
+
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -e '.[all,dev]'
+      - name: Build distributions
+        run: python -m build
+      - name: Produce reproducible CI reports and source ZIP
+        run: |
+          mkdir -p reports
+          schema-compat tests.sample_models:ApiV1 tests.sample_models:ApiV2Breaking --direction input --fail-on never --json > reports/input-breaking.json
+          schema-compat tests.sample_models:AliasV1 tests.sample_models:AliasV2 --direction output --fail-on never --json > reports/output-rename.json
+          schema-compat tests.sample_models:ObjectV1 tests.sample_models:ObjectV2 --fail-on never --json > reports/review-required.json
+          python -c "import json; d=json.load(open('reports/input-breaking.json')); assert d['verdict']=='breaking_detected'"
+          python -m pip freeze > reports/dependencies.txt
+          git archive --format=zip -o dist/schema-compat-standalone-source.zip HEAD
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: schema-compat-standalone-build
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/schema-compat-standalone-source.zip
+            reports/*.json
+            reports/dependencies.txt
+          if-no-files-found: error
+          retention-days: 30
