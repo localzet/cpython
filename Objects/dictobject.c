@@ -2499,6 +2499,12 @@ dict_unhashable_type(PyObject *op, PyObject *key)
         return;
     }
 
+    PyObject *notes = NULL;
+    if (PyObject_GetOptionalAttr(exc, &_Py_ID(__notes__), &notes) < 0) {
+        /* Do not override the hashing TypeError on failure to read notes. */
+        PyErr_Clear();
+    }
+
     const char *errmsg;
     if (PyFrozenDict_Check(op)) {
         errmsg = "cannot use '%T' as a frozendict key (%S)";
@@ -2507,6 +2513,15 @@ dict_unhashable_type(PyObject *op, PyObject *key)
         errmsg = "cannot use '%T' as a dict key (%S)";
     }
     PyErr_Format(PyExc_TypeError, errmsg, key, exc);
+    if (notes != NULL) {
+        PyObject *replacement = PyErr_GetRaisedException();
+        if (replacement != NULL
+            && PyObject_SetAttr(replacement, &_Py_ID(__notes__), notes) < 0) {
+            PyErr_Clear();
+        }
+        PyErr_SetRaisedException(replacement);
+        Py_DECREF(notes);
+    }
     Py_DECREF(exc);
 }
 

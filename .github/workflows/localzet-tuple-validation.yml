@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - gh-161433-tuple-hash-notes
+      - gh-161433-dict-set-notes-poc
   pull_request:
     branches:
       - main

@@ -686,6 +686,26 @@ class TestSet(TestJointOps, unittest.TestCase):
         with self.assertRaises(KeyError):
             myset.discard(elem2)
 
+    def test_unhashable_tuple_element_preserves_notes(self):
+        elem = ("alice", [])
+        with self.assertRaisesRegex(TypeError,
+                                    "cannot use 'tuple' as a set element") as cm:
+            s = set()
+            s.add(elem)
+        self.assertEqual(cm.exception.__notes__,
+                         ["when hashing tuple item 1"])
+
+        class AnnotatedElement:
+            def __hash__(self):
+                exc = TypeError("custom failure")
+                exc.add_note("custom note")
+                raise exc
+
+        with self.assertRaisesRegex(TypeError,
+                                    "cannot use 'AnnotatedElement' as a set element") as cm:
+            s.add(AnnotatedElement())
+        self.assertEqual(cm.exception.__notes__, ["custom note"])
+
     def test_hash_collision_remove_add(self):
         self.maxDiff = None
         # There should be enough space, so all elements with unique hash

@@ -1702,6 +1702,26 @@ class DictTest(unittest.TestCase):
         with self.assertRaises(KeyError):
             d.get(key2)
 
+    def test_unhashable_tuple_key_preserves_notes(self):
+        key = ("alice", [])
+        with self.assertRaisesRegex(TypeError,
+                                    "cannot use 'tuple' as a dict key") as cm:
+            d = {}
+            d[key] = 1
+        self.assertEqual(cm.exception.__notes__,
+                         ["when hashing tuple item 1"])
+
+        class AnnotatedKey:
+            def __hash__(self):
+                exc = TypeError("custom failure")
+                exc.add_note("custom note")
+                raise exc
+
+        with self.assertRaisesRegex(TypeError,
+                                    "cannot use 'AnnotatedKey' as a dict key") as cm:
+            d[AnnotatedKey()] = 1
+        self.assertEqual(cm.exception.__notes__, ["custom note"])
+
     def test_clear_at_lookup(self):
         # gh-140551 dict crash if clear is called at lookup stage
         class X:

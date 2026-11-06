@@ -352,9 +352,24 @@ set_unhashable_type(PyObject *key)
         return;
     }
 
+    PyObject *notes = NULL;
+    if (PyObject_GetOptionalAttr(exc, &_Py_ID(__notes__), &notes) < 0) {
+        /* Do not override the hashing TypeError on failure to read notes. */
+        PyErr_Clear();
+    }
+
     PyErr_Format(PyExc_TypeError,
                  "cannot use '%T' as a set element (%S)",
                  key, exc);
+    if (notes != NULL) {
+        PyObject *replacement = PyErr_GetRaisedException();
+        if (replacement != NULL
+            && PyObject_SetAttr(replacement, &_Py_ID(__notes__), notes) < 0) {
+            PyErr_Clear();
+        }
+        PyErr_SetRaisedException(replacement);
+        Py_DECREF(notes);
+    }
     Py_DECREF(exc);
 }
 
