@@ -4,11 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "localzet-schema-compat"
-version = "0.1.0.dev0"
+version = "0.1.0a1"
 description = "Conservative directional migration risk analysis across Python data model schemas"
 readme = "README.md"
 requires-python = ">=3.13"
 authors = [{name = "localzet"}]
+license = "MIT"
 keywords = ["schema", "migration", "typeddict", "dataclass", "pydantic"]
 classifiers = [
   "Development Status :: 3 - Alpha",

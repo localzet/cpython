@@ -6,6 +6,8 @@ Input compares old-valid payloads against a newer input schema.
 Output compares new-produced payloads against previous reader expectations.
 
 Breaking findings:
+- Declared annotation narrowed with a concrete synthetic counterexample
+  (bounded union/Optional/Literal and selected container grammar).
 - New required input field, or optional field made mandatory.
 - Previously accepted input name removed.
 - Removed input field when newer provider forbids unknown keys.
@@ -15,7 +17,7 @@ Breaking findings:
 
 Review-required findings:
 - New/removed output fields.
-- Arbitrary annotation change.
+- Annotation changes outside the supported and provable grammar.
 - Change in unknown-field policy, defaults, source library or object model.
 - Different model class, because custom validators, converters and
   serializers are not fully described by metadata.

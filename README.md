@@ -56,6 +56,19 @@ fail on newly emitted values.
 The analyzers report concrete changes where possible and require review
 for unknown provider semantics, values, validators and serializers.
 
+## Declared annotation relationships (0.1.0a1)
+
+The checker now detects *declared* type narrowing in a supported subset:
+finite Literal values, nullable/union types, primitive scalars, list[T],
+dict[str, T] and tuple[T, ...]. It emits a synthetic counterexample that
+old annotations permit and new annotations exclude. The original FastAPI
+Schema.type field transition is now reported as breaking_detected, rather
+than only requiring review.
+
+This does NOT prove that arbitrary validators or serializers obey those
+annotations. Unsupported types and unknown behavior require review.
+See docs/TYPE_RELATIONS.md.
+
 ## Evidence and safety
 
 See docs/CASE_STUDIES.md for two field-level reconstructions sourced from
@@ -72,4 +85,6 @@ standalone source tree is staged in a dedicated branch of localzet/cpython,
 with no CPython source files on that branch. Download the source ZIP from
 its GitHub Actions build, then push to a fresh repository when created.
 
-Choose a license before external publication or distribution.
+Licensed under MIT. The proposed PyPI publisher requires a separate GitHub
+repository and explicit PyPI Trusted Publisher setup. This branch is
+public source staging, NOT an authenticated PyPI publication.

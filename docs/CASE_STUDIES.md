@@ -12,13 +12,13 @@ File: fastapi/openapi/models.py; old type annotation was Optional[str].
 New annotation is Optional[Union[SchemaType, List[SchemaType]]], with
 SchemaType limited to seven Literal strings.
 
-The analyzer reports review_required (annotation_changed), not a definite
-break. A Pydantic-v2 minimal witness shows that old accepted
+The enhanced analyzer reports breaking_detected (declared_type_narrowed),
+with a synthetic witness from the earlier str annotation. A Pydantic-v2 minimal witness shows that old accepted
 {"type": "custom-extension"} while new rejects it; the new form also
 accepts {"type": ["string", "null"]}, which old rejects.
 
-CONCLUSION: A definite break can be hidden behind review_required.
-A CI gate that fails only for breaking_detected misses this case.
+CONCLUSION: The bounded annotation analyzer now detects this declared
+narrowing, while runtime behavior is tested separately in the fixture.
 
 ## openai-python: new response metadata (2026-08-17)
 
@@ -45,7 +45,7 @@ fails under the new model.
 
 | Case | Analyzer | Minimal runtime check |
 |---|---|---|
-| FastAPI field type | review_required | Breaking witness |
+| FastAPI field type | breaking_detected | Breaking witness |
 | openai-python optional output field | review_required | Old default-Pydantic reader accepts |
 | Synthetic new required field | breaking_detected | Breaking witness |
 
