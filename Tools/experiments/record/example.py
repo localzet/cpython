@@ -1,9 +1,9 @@
 """Simple executable example."""
-from record import record
+from record import Record, record
 
 
 @record
-class User:
+class User(Record):
     id: int
     name: str
     active: bool = True
