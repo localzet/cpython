@@ -1,6 +1,4 @@
 """Regression tests for directional schema migration risk assessment."""
-from __future__ import annotations
-
 import json
 import subprocess
 import sys
