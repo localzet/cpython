@@ -49,3 +49,13 @@ default factories. get_type_hints may execute annotation expressions, so
 introspect **trusted code only**.
 
 Read SPEC.md and GAPS.md before interpreting any comparison as a contract.
+
+
+## Independent migration checker consumer
+
+An experimental *consumer* of SchemaMeta is available in
+[MIGRATION-README.md](MIGRATION-README.md): it generates directional
+input/output migration risk reports, deterministic versioned JSON and
+CI-friendly exit codes. See [MIGRATION.md](MIGRATION.md) for exact rules and
+[MIGRATION-RESULTS.md](MIGRATION-RESULTS.md) for verified CI evidence.
+It does not claim complete compatibility or propose a CPython builtin.
