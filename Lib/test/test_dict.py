@@ -1710,7 +1710,9 @@ class DictTest(unittest.TestCase):
             d[key] = 1
         self.assertEqual(cm.exception.__notes__,
                          ["when hashing tuple item 1"])
+        self.assertIsNone(cm.exception.__cause__)
 
+        # A Python-defined __hash__ carries a traceback worth retaining.
         class AnnotatedKey:
             def __hash__(self):
                 exc = TypeError("custom failure")
@@ -1720,7 +1722,22 @@ class DictTest(unittest.TestCase):
         with self.assertRaisesRegex(TypeError,
                                     "AnnotatedKey' as a dict key") as cm:
             d[AnnotatedKey()] = 1
-        self.assertEqual(cm.exception.__notes__, ["custom note"])
+        cause = cm.exception.__cause__
+        self.assertIsInstance(cause, TypeError)
+        self.assertEqual(str(cause), "custom failure")
+        self.assertEqual(cause.__notes__, ["custom note"])
+        self.assertIsNotNone(cause.__traceback__)
+        self.assertIs(cm.exception.__context__, cause)
+
+        class PlainKey:
+            def __hash__(self):
+                raise TypeError("without notes")
+
+        with self.assertRaisesRegex(TypeError,
+                                    "PlainKey' as a dict key") as cm:
+            d[PlainKey()] = 1
+        self.assertEqual(str(cm.exception.__cause__), "without notes")
+        self.assertIsNotNone(cm.exception.__cause__.__traceback__)
 
     def test_clear_at_lookup(self):
         # gh-140551 dict crash if clear is called at lookup stage

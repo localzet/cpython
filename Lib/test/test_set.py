@@ -694,6 +694,7 @@ class TestSet(TestJointOps, unittest.TestCase):
             s.add(elem)
         self.assertEqual(cm.exception.__notes__,
                          ["when hashing tuple item 1"])
+        self.assertIsNone(cm.exception.__cause__)
 
         class AnnotatedElement:
             def __hash__(self):
@@ -704,7 +705,22 @@ class TestSet(TestJointOps, unittest.TestCase):
         with self.assertRaisesRegex(TypeError,
                                     "AnnotatedElement' as a set element") as cm:
             s.add(AnnotatedElement())
-        self.assertEqual(cm.exception.__notes__, ["custom note"])
+        cause = cm.exception.__cause__
+        self.assertIsInstance(cause, TypeError)
+        self.assertEqual(str(cause), "custom failure")
+        self.assertEqual(cause.__notes__, ["custom note"])
+        self.assertIsNotNone(cause.__traceback__)
+        self.assertIs(cm.exception.__context__, cause)
+
+        class PlainElement:
+            def __hash__(self):
+                raise TypeError("without notes")
+
+        with self.assertRaisesRegex(TypeError,
+                                    "PlainElement' as a set element") as cm:
+            s.add(PlainElement())
+        self.assertEqual(str(cm.exception.__cause__), "without notes")
+        self.assertIsNotNone(cm.exception.__cause__.__traceback__)
 
     def test_hash_collision_remove_add(self):
         self.maxDiff = None
