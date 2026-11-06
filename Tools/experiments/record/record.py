@@ -6,10 +6,9 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import MISSING, dataclass, field, fields
-from functools import lru_cache
 from types import UnionType
 from typing import (
-    Any, Literal, Self, TypeVar, Union, dataclass_transform, get_args,
+    Any, Literal, NoReturn, Self, TypeVar, Union, cast, dataclass_transform, get_args,
     get_origin, get_type_hints, overload,
 )
 
@@ -26,7 +25,7 @@ def _type_name(annotation: object) -> str:
     return getattr(annotation, "__name__", str(annotation))
 
 
-def _fail(path: str, expected: object, value: object) -> None:
+def _fail(path: str, expected: object, value: object) -> NoReturn:
     raise RecordValidationError(
         f"{path}: expected {_type_name(expected)}, got "
         f"{type(value).__name__}")
@@ -93,14 +92,21 @@ def _check(value: object, annotation: object, path: str) -> None:
     raise TypeError(f"Unsupported annotation {_type_name(annotation)}")
 
 
-@lru_cache(maxsize=256)
+_SCHEMA_CACHE: dict[type, tuple[tuple[str, object, bool], ...]] = {}
+
+
 def _schema(cls: type) -> tuple[tuple[str, object, bool], ...]:
+    cached = _SCHEMA_CACHE.get(cls)
+    if cached is not None:
+        return cached
     hints = get_type_hints(cls)
-    return tuple(
+    schema = tuple(
         (f.name, hints[f.name],
          f.default is MISSING and f.default_factory is MISSING)
         for f in fields(cls)
     )
+    _SCHEMA_CACHE[cls] = schema
+    return schema
 
 
 class Record:
@@ -132,7 +138,7 @@ class Record:
 
     def to_mapping(self) -> dict[str, object]:
         """Return a *shallow* mapping of field names to values."""
-        return {f.name: getattr(self, f.name) for f in fields(self)}
+        return {f.name: getattr(self, f.name) for f in fields(cast(Any, self))}
 
 
 @overload
@@ -160,6 +166,6 @@ def record(cls: T | None = None, /, *, frozen: bool = False
         if collisions:
             raise TypeError(
                 f"Reserved record field/method name: {sorted(collisions)!r}")
-        return dataclass(slots=True, kw_only=True, frozen=frozen)(target)
+        return cast(T, dataclass(slots=True, kw_only=True, frozen=frozen)(target))
 
     return decorate(cls) if cls is not None else decorate
