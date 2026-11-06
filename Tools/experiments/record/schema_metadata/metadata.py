@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import MISSING, dataclass, fields, is_dataclass
 from typing import (
-    Annotated, Any, Literal, Protocol, ReadOnly, Required, NotRequired,
+    Annotated, Any, Literal, Protocol, ReadOnly, Required, NotRequired, cast,
     get_args, get_origin, get_type_hints, is_typeddict,
 )
 
@@ -97,8 +97,8 @@ def _typeddict(cls: type) -> SchemaMeta:
         raise UnsupportedSchema(
             "Deferred TypedDict annotations can invalidate requiredness")
     hints = get_type_hints(cls, include_extras=True)
-    required_keys = set(cls.__required_keys__)
-    optional_keys = set(cls.__optional_keys__)
+    required_keys = set(getattr(cls, "__required_keys__"))
+    optional_keys = set(getattr(cls, "__optional_keys__"))
     if required_keys & optional_keys or required_keys | optional_keys != set(hints):
         raise UnsupportedSchema("TypedDict requiredness metadata is inconsistent")
 
@@ -130,7 +130,7 @@ def _typeddict(cls: type) -> SchemaMeta:
 def _dataclass(cls: type) -> SchemaMeta:
     hints = get_type_hints(cls, include_extras=True)
     field_list = []
-    frozen = bool(cls.__dataclass_params__.frozen)
+    frozen = bool(getattr(cls, "__dataclass_params__").frozen)
     for f in fields(cls):
         if f.name not in hints:
             raise UnsupportedSchema(f"Missing dataclass type for {f.name!r}")
@@ -159,7 +159,7 @@ def _attrs(cls: type) -> SchemaMeta:
             raise UnsupportedSchema(f"{a.name}: init=False unsupported")
         kind: DefaultKind = (
             "missing" if a.default is attrs.NOTHING
-            else "factory" if isinstance(a.default, attrs.Factory) else "value")
+            else "factory" if isinstance(a.default, cast(type, attrs.Factory)) else "value")
         # attrs aliases name constructor parameters, not serialization keys.
         name = a.alias if a.alias is not None else a.name
         field_list.append(FieldMeta(
@@ -176,11 +176,11 @@ def _attrs(cls: type) -> SchemaMeta:
 def _pydantic(cls: type) -> SchemaMeta:
     from pydantic import AliasChoices, AliasPath
 
-    config = cls.model_config
+    config = getattr(cls, "model_config")
     names_allowed = bool(
         config.get("validate_by_name", config.get("populate_by_name", False)))
     field_list = []
-    for name, f in cls.model_fields.items():
+    for name, f in getattr(cls, "model_fields").items():
         if isinstance(f.validation_alias, (AliasChoices, AliasPath)):
             raise UnsupportedSchema(
                 f"{name}: compound validation aliases are unsupported")
@@ -201,7 +201,7 @@ def _pydantic(cls: type) -> SchemaMeta:
     if extra not in ("allow", "ignore", "forbid"):
         raise UnsupportedSchema(f"Unknown Pydantic extra policy: {extra!r}")
     return SchemaMeta(
-        "pydantic", cls, "object", tuple(field_list), extra,
+        "pydantic", cls, "object", tuple(field_list), cast(Openness, extra),
         config.get("frozen", False), "configurable",
         ("Output keys describe model_dump(by_alias=True), not the default dump.",
          "Validation/serialization hooks, coercion and strictness are not captured.",
@@ -211,7 +211,7 @@ def _pydantic(cls: type) -> SchemaMeta:
 def _msgspec(cls: type) -> SchemaMeta:
     import msgspec
 
-    cfg = cls.__struct_config__
+    cfg = getattr(cls, "__struct_config__")
     if cfg.array_like or cfg.tag is not None:
         raise UnsupportedSchema(
             "Array-like or tagged msgspec.Struct wire formats unsupported")
