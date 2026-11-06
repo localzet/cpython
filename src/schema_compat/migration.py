@@ -10,6 +10,7 @@ from collections.abc import Callable
 from typing import Literal, get_args, get_origin
 
 from .metadata import FieldMeta, SchemaMeta
+from .type_relations import assess_subset
 
 Direction = Literal["input", "output", "both"]
 Severity = Literal["breaking", "review", "info"]
@@ -88,29 +89,39 @@ def _analyze_annotations(old: FieldMeta, new: FieldMeta,
     if old.annotation == new.annotation:
         return
 
-    before, after = _literal_values(old.annotation), _literal_values(new.annotation)
-    if before is not None and after is not None:
-        if direction == "input":
-            narrowed = not _includes(after, before)
-            widened = not _includes(before, after)
-        else:
-            # New producers must not emit values outside old readers' types.
-            narrowed = not _includes(before, after)
-            widened = not _includes(after, before)
-        if narrowed:
-            add(direction, "breaking", "literal_set_contract", old.name,
-                "The declared Literal value set no longer accepts every "
-                "value from the earlier contract (for this direction). "
-                "Runtime validators are not inspected.")
-        if widened and not narrowed:
-            add(direction, "info", "literal_set_relaxed", old.name,
-                "The declared Literal value set was relaxed for this direction.")
+    before = _literal_values(old.annotation)
+    after = _literal_values(new.annotation)
+    older, newer = (
+        (old.annotation, new.annotation) if direction == "input"
+        else (new.annotation, old.annotation)
+    )
+    inclusion = assess_subset(older, newer)
+    reverse = assess_subset(newer, older)
+    if inclusion.relation == "excluded":
+        code = ("literal_set_contract" if before is not None
+                and after is not None else "declared_type_narrowed")
+        add(direction, "breaking", code, old.name,
+            f"A synthetic value allowed by the previous declared contract "
+            f"is excluded by the newer contract: {inclusion.witness}. "
+            "This concerns annotations, not actual provider-specific "
+            "coercion, validators or serialization settings.")
         return
-
+    if inclusion.relation == "included" and reverse.relation == "excluded":
+        code = ("literal_set_relaxed" if before is not None
+                and after is not None else "declared_type_relaxed")
+        add(direction, "info", code, old.name,
+            "The newer declared value set is broader in this direction. "
+            "Custom runtime behavior has not been established.")
+        return
+    if inclusion.relation == "included" and reverse.relation == "included":
+        add(direction, "review", "type_equivalent_metadata", old.name,
+            "The supported annotation subset appears equivalent, "
+            "but provider-specific runtime behavior remains unknown.")
+        return
     add(direction, "review", "annotation_changed", old.name,
         f"The annotated type changed from {old.annotation!r} to "
-        f"{new.annotation!r}. Subtyping and runtime coercion are unknown.")
-
+        f"{new.annotation!r}. The analyzer could not prove the relationship "
+        "within its supported grammar; coercion and runtime rules are unknown.")
 
 _Add = Callable[[Literal["input", "output", "general"], Severity, str, str, str], None]
 
