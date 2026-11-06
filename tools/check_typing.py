@@ -8,8 +8,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-POS = ROOT / "schema_metadata/typecheck_cases/positive.py"
-NEG = ROOT / "schema_metadata/typecheck_cases/negative.py"
+POS = ROOT / "tests/typing_cases/positive.py"
+NEG = ROOT / "tests/typing_cases/negative.py"
 EXPECTED = {
     i for i, line in enumerate(NEG.read_text().splitlines(), 1)
     if "# E:" in line
