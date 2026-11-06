@@ -71,11 +71,13 @@ jobs:
           python -m bridge.benchmark_bridge --sizes 3 10 30 --number 3000 --repeat 5 --output bridge/bridge-results.json
           python -m pip freeze > bridge/bridge-dependencies.txt
           python -c "import json; d=json.load(open('bridge/bridge-results.json')); assert len(d['results']) >= 50"
+          python -m bridge.summarize_bridge bridge/bridge-results.json --output bridge/bridge-summary.md
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: typed-dict-dataclass-bridge-results
           path: |
             Tools/experiments/record/bridge/bridge-results.json
+            Tools/experiments/record/bridge/bridge-summary.md
             Tools/experiments/record/bridge/bridge-dependencies.txt
           if-no-files-found: error
           retention-days: 30
