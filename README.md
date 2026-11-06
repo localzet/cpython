@@ -20,11 +20,11 @@ published to PyPI.
 
 The project includes source-derived sample fixtures:
 
-    schema-compat tests.sample_models:ApiV1 tests.sample_models:ApiV2Breaking --direction input --json
+    python -m schema_compat.cli tests.sample_models:ApiV1 tests.sample_models:ApiV2Breaking --direction input --json
 
-    schema-compat tests.sample_models:AliasV1 tests.sample_models:AliasV2 --direction output
+    python -m schema_compat.cli tests.sample_models:AliasV1 tests.sample_models:AliasV2 --direction output
 
-    schema-compat tests.sample_models:ObjectV1 tests.sample_models:ObjectV2 --fail-on review
+    python -m schema_compat.cli tests.sample_models:ObjectV1 tests.sample_models:ObjectV2 --fail-on review
 
 Options: --direction input|output|both; --fail-on breaking|review|never;
 --json for stable versioned machine output.
