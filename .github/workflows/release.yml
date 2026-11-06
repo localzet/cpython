@@ -20,6 +20,19 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.13'
+      - name: Verify release tag equals pyproject version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+          with open("pyproject.toml", "rb") as handle:
+              version = tomllib.load(handle)["project"]["version"]
+          assert os.environ["RELEASE_TAG"] == "v" + version, (
+              "Release tag and package version differ"
+          )
+          PY
       - run: python -m pip install '.[all,dev]' 'twine>=6,<7'
       - run: python -m unittest discover -s tests -p 'test_*.py' -v
       - run: python -m build
