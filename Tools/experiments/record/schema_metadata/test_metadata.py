@@ -257,6 +257,34 @@ class SchemaMetadataTests(unittest.TestCase):
         self.assertTrue(any(f.code == "representation"
                             for f in result.findings))
 
+    def test_unknown_field_mutability_remains_uncertain(self):
+        class Payload(TypedDict):
+            name: ReadOnly[str]
+
+        @dataclass(frozen=True)
+        class FrozenPerson:
+            name: str
+
+        result = compare_metadata(
+            inspect_schema(Payload), inspect_schema(FrozenPerson))
+        codes = {f.code for f in result.findings}
+        self.assertIn("static_readonly", codes)
+        self.assertIn("assignment_frozen", codes)
+        self.assertEqual(result.verdict, "inconclusive")
+
+    def test_different_defaults_cannot_be_proven_equal(self):
+        @dataclass
+        class A:
+            id: int = 1
+
+        @dataclass
+        class B:
+            id: int = 2
+
+        result = compare_metadata(inspect_schema(A), inspect_schema(B))
+        self.assertEqual(result.verdict, "inconclusive")
+        self.assertIn("opaque_default", {f.code for f in result.findings})
+
     def test_no_default_values_or_factories_executed(self):
         calls: list[str] = []
         def factory() -> list[int]:
