@@ -1,49 +1,75 @@
-# Record type experiment
+# CPython structured-record research
 
-**Research branch only.** This directory does not modify CPython's parser,
-runtime or standard library. It evaluates whether a fixed-shape data type
-could add meaningful value beyond dataclasses, TypedDict and external libraries.
+This is an isolated **research prototype**. It changes neither CPython's
+parser nor a built-in type. It is **not** an upstream feature proposal.
 
-## Reproduce
+## Quick start
 
-From the repository root (Python 3.11+; no dependencies):
+Use Python 3.13+ (CI also runs on 3.14):
 
     cd Tools/experiments/record
+    python -m pip install -r requirements-research.txt
     python -m unittest discover -s . -p 'test_*.py' -v
-    python bench.py --number 30000 --repeat 5 --instances 10000
+    python check_typing.py
+    python benchmark_matrix.py --sizes 3 10 30 --number 2000 \
+      --repeat 5 --instances 1500 --output results.json
+
+Behavioral tests use only stdlib modules. External dependencies are needed
+for the comparison and static-checker tests. Pinned direct dependencies are
+listed in requirements-research.txt; save the full environment for a stricter
+reproduction.
 
 ## Example
 
-    from record import record
+    from record import Record, record
 
     @record
-    class User:
+    class User(Record):
         id: int
         name: str
         tags: list[str]
-        active: bool = True
 
     user = User(id=1, name="Ada", tags=["dev"])
-    checked = User.from_mapping({"id": 1, "name": "Ada", "tags": ["dev"]})
-    assert checked.to_mapping()["id"] == 1
+    validated = User.from_mapping({
+        "id": 1, "name": "Ada", "tags": ["dev"]
+    })
+    assert validated.to_mapping()["id"] == 1
 
-The decorator uses dataclass(slots=True, kw_only=True). Instances have
-fixed fields, repr, equality, defaults and optional frozen=True behavior.
-Direct construction and assignment do not validate annotations. Explicit
-from_mapping() rejects missing/extra keys and checks a deliberately limited
-subset of annotations. It does not coerce input. to_mapping() is shallow.
+Plain construction deliberately does **not** enforce types. Only
+from_mapping() validates. Instances use dataclass(slots=True, kw_only=True).
+Frozen records use @record(frozen=True). Inherit Record to expose mapping
+methods to both runtime and static analyzers.
 
-The prototype supports concrete classes, unions, Literal, and parameterized
-list/dict/tuple. It does not decode nested record classes or support arbitrary
-typing constructs. Static type-checker behavior of dynamically added methods
-has not yet been assessed.
+The supported annotation subset is small and intentionally non-coercing.
+Nested error paths are diagnostic; they are not evidence of complete
+JSON Schema, attrs, Pydantic or msgspec compatibility.
 
-## Result so far
+## Files
 
-The pure-Python checked constructor was considerably slower than simple
-handwritten validation for a tiny schema. Direct instances have the same
-layout as slotted dataclasses. There is **no current performance argument
-for a new builtin**. See DESIGN.md and BENCHMARKS.md.
+- record.py — slotted baseline with explicit mapping validation
+- test_record.py — behavior, inheritance, frozen, unknown field and errors
+- check_typing.py + typecheck_cases/ — positive and expected-negative
+  mypy and Pyright checks, including constructor and frozen semantics
+- benchmark_matrix.py — 3/10/30-field structured comparison, JSON output
+- bench.py — historical introductory 3-field microbenchmark
+- COMPARISON.md — capability matrix, semantic gaps and decision criteria
+- METHODOLOGY.md — methodology, comparability limits and reproduction
+- BENCHMARKS.md — initial baseline, historical only
+- DESIGN.md — original design assumptions; COMPARISON.md supersedes it
+- example.py — runnable example
 
-Next: gather concrete usage gaps, establish benchmark fairness and discuss
-semantics with maintainers before any syntax or builtin proposal.
+## Current conclusion
+
+The object layout is a slotted dataclass. There is no demonstrated advantage
+for a new CPython builtin or a new keyword. A standardized boundary-validation
+API, stronger static typing and useful error locations are plausible smaller
+investigations. A C rewrite is explicitly **out of scope** until a measurable
+and compelling gap has been established.
+
+## Links
+
+- https://docs.python.org/3/library/dataclasses.html
+- https://typing.python.org/en/latest/spec/dataclasses.html
+- https://msgspec.dev/structs
+- https://www.attrs.org/en/stable/
+- https://docs.pydantic.dev/latest/
