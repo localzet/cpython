@@ -58,4 +58,5 @@ The return type of to_mapping() is deliberately dict[str, object]. Statically
 pretending it is an arbitrary TypedDict would be unsound without a separate
 typing specification.
 
-Read CONTRACT.md and METHODOLOGY.md before interpreting the API or results.
+Read CONTRACT.md, METHODOLOGY.md, and RESULTS.md before interpreting
+this API or its benchmark observations.
