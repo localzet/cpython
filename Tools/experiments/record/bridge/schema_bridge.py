@@ -63,7 +63,7 @@ def _optional(annotation: object) -> object | None:
     args = get_args(annotation)
     inner = [arg for arg in args if arg is not _NONE_TYPE]
     if len(args) == 2 and len(inner) == 1:
-        return inner[0]
+        return cast(object, inner[0])
     raise SchemaError(
         f"Unsupported union {annotation!r}; only T | None is supported")
 
@@ -141,7 +141,7 @@ def _codec(model_ann: object, wire_ann: object,
             for key, val in cast(dict[object, object], value).items():
                 if type(key) is not str:
                     _err(f"{path}.<key>", "str", key)
-                k = cast(str, key)
+                k = key
                 result[k] = method(val, f"{path}[{k!r}]")
             return result
 
@@ -187,7 +187,7 @@ def _build(model: type, shape: object,
     if not is_typeddict(shape):
         raise SchemaError("Payload schema must be a TypedDict definition")
 
-    shape_type = cast(type, shape)
+    shape_type = cast(Any, shape)
     pair = (model, shape_type)
     if pair in parents:
         raise SchemaError("Recursive model/schema pairs are not supported")
@@ -237,7 +237,7 @@ def _decode(plan: _RecordPlan, input_value: object, path: str,
     missing = plan.required - given
     if missing:
         raise ValidationError(f"{path}: missing keys {sorted(missing)!r}")
-    extras = given - plan.field_names
+    extras = {cast(str, key) for key in given - plan.field_names}
     if extra == "forbid" and extras:
         raise ValidationError(f"{path}: unexpected keys {sorted(extras)!r}")
     kwargs = {}
