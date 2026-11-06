@@ -72,9 +72,14 @@ jobs:
           cd Tools/experiments/record
           python benchmark_matrix.py --sizes 3 10 30 --number 2000 --repeat 5 --instances 1500 --output record-bench-results.json
           python -c "import json; d=json.load(open('record-bench-results.json')); print('Measurements:', len(d['results'])); assert len(d['results']) > 100"
+          python summarize_benchmark.py record-bench-results.json --output record-bench-summary.md
+          python -m pip freeze > record-bench-dependencies.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: record-study-benchmark-py313
-          path: Tools/experiments/record/record-bench-results.json
+          path: |
+            Tools/experiments/record/record-bench-results.json
+            Tools/experiments/record/record-bench-summary.md
+            Tools/experiments/record/record-bench-dependencies.txt
           if-no-files-found: error
           retention-days: 30
