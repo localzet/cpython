@@ -68,9 +68,9 @@ jobs:
       - name: Produce reproducible CI reports and source ZIP
         run: |
           mkdir -p reports
-          schema-compat tests.sample_models:ApiV1 tests.sample_models:ApiV2Breaking --direction input --fail-on never --json > reports/input-breaking.json
-          schema-compat tests.sample_models:AliasV1 tests.sample_models:AliasV2 --direction output --fail-on never --json > reports/output-rename.json
-          schema-compat tests.sample_models:ObjectV1 tests.sample_models:ObjectV2 --fail-on never --json > reports/review-required.json
+          python -m schema_compat.cli tests.sample_models:ApiV1 tests.sample_models:ApiV2Breaking --direction input --fail-on never --json > reports/input-breaking.json
+          python -m schema_compat.cli tests.sample_models:AliasV1 tests.sample_models:AliasV2 --direction output --fail-on never --json > reports/output-rename.json
+          python -m schema_compat.cli tests.sample_models:ObjectV1 tests.sample_models:ObjectV2 --fail-on never --json > reports/review-required.json
           python -c "import json; d=json.load(open('reports/input-breaking.json')); assert d['verdict']=='breaking_detected'"
           python -m pip freeze > reports/dependencies.txt
           git archive --format=zip -o dist/schema-compat-standalone-source.zip HEAD
