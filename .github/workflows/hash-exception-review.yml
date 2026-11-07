@@ -1,0 +1,94 @@
+name: Hash exception reviewer experiment
+
+on:
+  push:
+    branches:
+      - review/gh-149313-address-picnixz
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gh-149313-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  patched:
+    name: CPython regression ${{ matrix.mode }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: debug-gil
+            free_threading: false
+          - mode: debug-free-threaded
+            free_threading: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install build requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libssl-dev libffi-dev \
+            libsqlite3-dev zlib1g-dev
+      - name: Configure debug CPython
+        run: |
+          if [ "${{ matrix.free_threading }}" = true ]; then
+            ./configure --with-pydebug --disable-gil --without-ensurepip
+          else
+            ./configure --with-pydebug --without-ensurepip
+          fi
+      - name: Build
+        run: make -j2
+      - name: Focused regression suite
+        run: ./python -m test -j2 test_tuple test_dict test_set test_traceback
+      - name: Capture new traceback behavior
+        run: |
+          ./python Tools/experiments/hash_error_review_demo.py \
+            > patched-tracebacks.txt 2>&1
+          cat patched-tracebacks.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: patched-tracebacks-${{ matrix.mode }}
+          path: patched-tracebacks.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  baseline:
+    name: Before patch — pinned CPython base
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Save demo script and check out exact PR base commit
+        run: |
+          cp Tools/experiments/hash_error_review_demo.py "$RUNNER_TEMP/demo.py"
+          git checkout --detach 6c5596c7199792ea1e8cf26f65da8cd0023c0473
+      - name: Install build requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libssl-dev libffi-dev \
+            libsqlite3-dev zlib1g-dev
+      - name: Configure and build debug CPython
+        run: |
+          ./configure --with-pydebug --without-ensurepip
+          make -j2
+      - name: Capture old traceback behavior
+        run: |
+          ./python "$RUNNER_TEMP/demo.py" > baseline-tracebacks.txt 2>&1
+          cat baseline-tracebacks.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: baseline-tracebacks-pinned
+          path: baseline-tracebacks.txt
+          if-no-files-found: error
+          retention-days: 30
