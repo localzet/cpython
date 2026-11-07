@@ -1310,12 +1310,11 @@ _PyErr_ReplaceTypeError(PyObject *exc, const char *format, ...)
     if (msg == NULL) {
         return;
     }
-    PyErr_SetObject(PyExc_TypeError, msg);
+    /* Construct the replacement directly; don't fetch it back from
+       the error indicator (which can be NULL if construction failed). */
+    PyObject *new_exc = PyObject_CallOneArg(PyExc_TypeError, msg);
     Py_DECREF(msg);
-
-    PyObject *new_exc = PyErr_GetRaisedException();
-    if (!Py_IS_TYPE(new_exc, (PyTypeObject *)PyExc_TypeError)) {
-        PyErr_SetRaisedException(new_exc);
+    if (new_exc == NULL) {
         return;
     }
 
@@ -1329,25 +1328,36 @@ _PyErr_ReplaceTypeError(PyObject *exc, const char *format, ...)
         PyException_SetCause(new_exc, Py_NewRef(exc));
     }
     else {
-        PyObject *notes;
+        PyObject *notes = NULL;
         if (PyObject_GetOptionalAttr(exc, &_Py_ID(__notes__), &notes) < 0) {
-            PyErr_Clear();
+            /* Preserve the replacement but don't hide diagnostics from
+               a failing notes lookup. */
+            PyErr_WriteUnraisable(exc);
         }
         else if (notes != NULL) {
-            // A list is copied to not share it with exc.  Other values are
-            // not supported by add_note() and are kept as they are.
-            Py_SETREF(notes, PyList_Check(notes)
+            /* Copy the container, not the note objects: add_note() creates
+               strings, and a list subclass must not be iterated. */
+            PyObject *copy = PyList_Check(notes)
                              ? PyList_GetSlice(notes, 0, PY_SSIZE_T_MAX)
-                             : Py_NewRef(notes));
-            if (notes == NULL
-                || PyObject_SetAttr(new_exc, &_Py_ID(__notes__), notes) < 0)
-            {
-                PyErr_Clear();
+                             : Py_NewRef(notes);
+            Py_DECREF(notes);
+            if (copy == NULL) {
+                PyErr_WriteUnraisable(exc);
             }
-            Py_XDECREF(notes);
+            else {
+                if (PyObject_SetAttr(new_exc, &_Py_ID(__notes__), copy) < 0) {
+                    PyErr_WriteUnraisable(exc);
+                }
+                Py_DECREF(copy);
+            }
         }
     }
-    PyErr_SetRaisedException(new_exc);
+
+    /* Use SetObject to preserve implicit context from an enclosing except
+       clause, without treating that context as a reason to chain exc. */
+    PyThreadState *tstate = _PyThreadState_GET();
+    _PyErr_SetObject(tstate, PyExc_TypeError, new_exc);
+    Py_DECREF(new_exc);
 }
 
 
