@@ -1,0 +1,50 @@
+name: Sparse dict research (fork only)
+
+on:
+  push:
+    branches:
+      - research/gh-161524-sparse-dict-copy
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gil:
+    name: Debug GIL and same-runner baseline
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Build and test modified interpreter
+        run: |
+          ./configure --with-pydebug --without-ensurepip
+          make -j4
+          ./python -m test -j2 test_dict test_capi.test_dict
+          echo '=== CANDIDATE ==='
+          ./python Tools/scripts/bench_sparse_dict_copy.py
+      - name: Build parent baseline and benchmark on same runner
+        run: |
+          git worktree add --detach ../baseline HEAD^
+          cd ../baseline
+          ./configure --with-pydebug --without-ensurepip
+          make -j4
+          echo '=== BASELINE ==='
+          ./python ../cpython/Tools/scripts/bench_sparse_dict_copy.py
+
+  free-threaded:
+    name: Debug free-threaded correctness
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and test free-threaded interpreter
+        run: |
+          ./configure --with-pydebug --disable-gil --without-ensurepip
+          make -j4
+          ./python -m test -j2 test_dict test_capi.test_dict

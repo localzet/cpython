@@ -86,6 +86,51 @@ class DictTest(unittest.TestCase):
         self.assertIs(bool({}), False)
         self.assertIs(bool({1: 2}), True)
 
+
+    def test_sparse_dict_copy(self):
+        # Check both specialized unicode and general-key tables.
+        for keys in ([f'key{i}' for i in range(120)], list(range(120))):
+            source = {key: object() for key in keys}
+            for key in keys[:80]:
+                del source[key]
+
+            expected = list(source.items())
+            for result in (source.copy(), dict(source), {**source}):
+                self.assertIsNot(result, source)
+                self.assertEqual(list(result.keys()),
+                                 [key for key, _ in expected])
+                for (_, value), (_, copied) in zip(expected, result.items()):
+                    self.assertIs(copied, value)
+                self.assertEqual(len(result), len(expected))
+                result.clear()
+                self.assertEqual(list(source.items()), expected)
+
+    def test_sparse_dict_copy_does_not_rehash(self):
+        class Key:
+            def __init__(self, value):
+                self.value = value
+                self.hash_calls = 0
+
+            def __hash__(self):
+                self.hash_calls += 1
+                return self.value % 5
+
+            def __eq__(self, other):
+                return self is other
+
+        keys = [Key(i) for i in range(90)]
+        source = {key: key.value for key in keys}
+        for key in keys[:70]:
+            del source[key]
+        calls = [key.hash_calls for key in keys]
+        expected = list(source.items())
+        for result in (source.copy(), dict(source), {**source}):
+            self.assertEqual([key.hash_calls for key in keys], calls)
+            for (key, value), (copy_key, copy_value) in zip(
+                    expected, result.items()):
+                self.assertIs(copy_key, key)
+                self.assertEqual(copy_value, value)
+
     def test_keys(self):
         d = {}
         self.assertEqual(set(d.keys()), set())
