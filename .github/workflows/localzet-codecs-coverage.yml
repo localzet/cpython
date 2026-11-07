@@ -1,0 +1,46 @@
+name: localzet codecs coverage research
+
+on:
+  push:
+    branches:
+      - research/gh-57017-buffered-decoder-tests
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gh-57017-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  codecs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [debug-gil, debug-free-threaded]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libssl-dev libffi-dev \
+            libsqlite3-dev zlib1g-dev
+      - name: Configure CPython
+        run: |
+          if [ "${{ matrix.build }}" = debug-free-threaded ]; then
+            ./configure --with-pydebug --disable-gil --without-ensurepip
+          else
+            ./configure --with-pydebug --without-ensurepip
+          fi
+      - name: Compile CPython
+        run: make -j2
+      - name: Focused new tests
+        run: ./python -m unittest test.test_codecs.BufferedIncrementalDecoderTest -v
+      - name: Complete codecs regression suite
+        run: ./python -m test -j2 test_codecs
