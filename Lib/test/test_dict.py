@@ -1746,11 +1746,12 @@ class DictTest(unittest.TestCase):
         try:
             1 / 0
         except ZeroDivisionError as handled:
+            handled_context = handled
             with self.assertRaisesRegex(TypeError,
                                         "cannot use 'tuple' as a dict key") as cm:
                 d[("alice", [])] = 1
         self.assertIsNone(cm.exception.__cause__)
-        self.assertIs(cm.exception.__context__, handled)
+        self.assertIs(cm.exception.__context__, handled_context)
         self.assertEqual(cm.exception.__notes__,
                          ["when hashing tuple item 1"])
 
