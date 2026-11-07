@@ -23,3 +23,21 @@ Open design decision:
 The old discussion and three earlier linked PRs must be reviewed before
 claiming a backward-compatible fix. This experiment is a reproducer,
 not a proposed CPython behavior change or new upstream PR.
+
+## Decision after reading upstream discussion (November 2026)
+
+An existing upstream PR, https://github.com/python/cpython/pull/29011,
+remains **open** and already fixes network reverse pointers by constructing
+reverse DNS zones from aligned IPv4 octet/IPv6 nibble prefixes, raising
+NetmaskValueError for unaligned lengths. Earlier alternative PRs #3632
+and #25371 were closed without merging. This is not a free upstream issue.
+
+Core developer Ronald Oussoren pointed out in issue #74713 that a network
+has no single PTR query name and that raising instead may be preferable.
+Issue #125641 explores a separate `reverse_pointers` collection API to
+represent unaligned networks. Neither approach has consensus.
+
+**Therefore do not open a competing PR for #91601.** The reproducer in
+this branch remains useful for reviewing #29011 or a future agreed design.
+For the second independent contribution, prioritize a distinct, scoped bug
+or test-coverage issue with no active competing PR.
