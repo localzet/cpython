@@ -717,7 +717,7 @@ class TestSet(TestJointOps, unittest.TestCase):
         rendered = ''.join(traceback.format_exception(cm.exception))
         self.assertIn('The above exception was the direct cause', rendered)
         self.assertIn('note', rendered)
-        self.assertIn("cannot use 'Elem' as a set element", rendered)
+        self.assertIn("as a set element (error)", rendered)
 
     def test_unhashable_element_format_error(self):
         class BadStr:

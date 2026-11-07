@@ -1692,7 +1692,7 @@ class DictTest(unittest.TestCase):
         rendered = ''.join(traceback.format_exception(cm.exception))
         self.assertIn('The above exception was the direct cause', rendered)
         self.assertIn('note', rendered)
-        self.assertIn("cannot use 'Key' as a dict key", rendered)
+        self.assertIn("as a dict key (error)", rendered)
 
     def test_unhashable_key_format_error(self):
         class BadStr:

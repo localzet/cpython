@@ -68,10 +68,13 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Save demo script and check out exact PR base commit
-        run: |
-          cp Tools/experiments/hash_error_review_demo.py "$RUNNER_TEMP/demo.py"
-          git checkout --detach 6c5596c7199792ea1e8cf26f65da8cd0023c0473
+      - name: Check out exact upstream base commit separately
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: python/cpython
+          ref: 6c5596c7199792ea1e8cf26f65da8cd0023c0473
+          path: baseline
+          persist-credentials: false
       - name: Install build requirements
         run: |
           sudo apt-get update
@@ -79,13 +82,15 @@ jobs:
             build-essential pkg-config libssl-dev libffi-dev \
             libsqlite3-dev zlib1g-dev
       - name: Configure and build debug CPython
+        working-directory: baseline
         run: |
           ./configure --with-pydebug --without-ensurepip
           make -j2
       - name: Capture old traceback behavior
+        working-directory: baseline
         run: |
-          ./python "$RUNNER_TEMP/demo.py" > baseline-tracebacks.txt 2>&1
-          cat baseline-tracebacks.txt
+          ./python ../Tools/experiments/hash_error_review_demo.py > ../baseline-tracebacks.txt 2>&1
+          cat ../baseline-tracebacks.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: baseline-tracebacks-pinned
