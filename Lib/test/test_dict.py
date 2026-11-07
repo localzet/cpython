@@ -1702,6 +1702,59 @@ class DictTest(unittest.TestCase):
         with self.assertRaises(KeyError):
             d.get(key2)
 
+    def test_unhashable_tuple_key_preserves_notes(self):
+        key = ("alice", [])
+        with self.assertRaisesRegex(TypeError,
+                                    "cannot use 'tuple' as a dict key") as cm:
+            d = {}
+            d[key] = 1
+        self.assertEqual(cm.exception.__notes__,
+                         ["when hashing tuple item 1"])
+        self.assertIsNone(cm.exception.__cause__)
+
+        # A Python-defined __hash__ carries a traceback worth retaining.
+        class AnnotatedKey:
+            def __hash__(self):
+                exc = TypeError("custom failure")
+                exc.add_note("custom note")
+                raise exc
+
+        with self.assertRaisesRegex(TypeError,
+                                    "AnnotatedKey' as a dict key") as cm:
+            d[AnnotatedKey()] = 1
+        cause = cm.exception.__cause__
+        self.assertIsInstance(cause, TypeError)
+        self.assertEqual(str(cause), "custom failure")
+        self.assertEqual(cause.__notes__, ["custom note"])
+        self.assertIsNotNone(cause.__traceback__)
+        # __cause__ retains the Python traceback; __context__ is not
+        # used as the reason to create the explicit chain.
+
+        class PlainKey:
+            def __hash__(self):
+                raise TypeError("without notes")
+
+        with self.assertRaisesRegex(TypeError,
+                                    "PlainKey' as a dict key") as cm:
+            d[PlainKey()] = 1
+        self.assertEqual(str(cm.exception.__cause__), "without notes")
+        self.assertIsNotNone(cm.exception.__cause__.__traceback__)
+
+
+        # A C-level failure inside an except clause has __context__ even
+        # though it lacks a traceback or an explicit __cause__.
+        try:
+            1 / 0
+        except ZeroDivisionError as handled:
+            handled_context = handled
+            with self.assertRaisesRegex(TypeError,
+                                        "cannot use 'tuple' as a dict key") as cm:
+                d[("alice", [])] = 1
+        self.assertIsNone(cm.exception.__cause__)
+        self.assertIs(cm.exception.__context__, handled_context)
+        self.assertEqual(cm.exception.__notes__,
+                         ["when hashing tuple item 1"])
+
     def test_clear_at_lookup(self):
         # gh-140551 dict crash if clear is called at lookup stage
         class X:

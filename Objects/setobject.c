@@ -352,9 +352,36 @@ set_unhashable_type(PyObject *key)
         return;
     }
 
+    /* Preserve a useful Python traceback or cause chain; otherwise
+       keep concise error output, copying any notes to the replacement. */
+    PyObject *tb = PyException_GetTraceback(exc);
+    PyObject *cause = PyException_GetCause(exc);
+    /* __context__ is also set for C-level failures inside except clauses
+       and does not by itself justify duplicating the inner TypeError. */
+    int chain_original = (tb != NULL || cause != NULL);
+    Py_XDECREF(tb);
+    Py_XDECREF(cause);
+
+    PyObject *notes = NULL;
+    if (!chain_original &&
+        PyObject_GetOptionalAttr(exc, &_Py_ID(__notes__), &notes) < 0) {
+        PyErr_Clear();
+    }
+
     PyErr_Format(PyExc_TypeError,
                  "cannot use '%T' as a set element (%S)",
                  key, exc);
+    if (chain_original || notes != NULL) {
+        PyObject *replacement = PyErr_GetRaisedException();
+        if (chain_original) {
+            PyException_SetCause(replacement, Py_NewRef(exc));
+        }
+        else if (PyObject_SetAttr(replacement, &_Py_ID(__notes__), notes) < 0) {
+            PyErr_Clear();
+        }
+        PyErr_SetRaisedException(replacement);
+        Py_XDECREF(notes);
+    }
     Py_DECREF(exc);
 }
 
