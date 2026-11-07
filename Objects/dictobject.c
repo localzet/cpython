@@ -2503,11 +2503,11 @@ dict_unhashable_type(PyObject *op, PyObject *key)
        keep concise error output, copying any notes to the replacement. */
     PyObject *tb = PyException_GetTraceback(exc);
     PyObject *cause = PyException_GetCause(exc);
-    PyObject *context = PyException_GetContext(exc);
-    int chain_original = (tb != NULL || cause != NULL || context != NULL);
+    /* __context__ is also set for C-level failures inside except clauses
+       and does not by itself justify duplicating the inner TypeError. */
+    int chain_original = (tb != NULL || cause != NULL);
     Py_XDECREF(tb);
     Py_XDECREF(cause);
-    Py_XDECREF(context);
 
     PyObject *notes = NULL;
     if (!chain_original &&
@@ -2527,7 +2527,6 @@ dict_unhashable_type(PyObject *op, PyObject *key)
         PyObject *replacement = PyErr_GetRaisedException();
         if (chain_original) {
             PyException_SetCause(replacement, Py_NewRef(exc));
-            PyException_SetContext(replacement, Py_NewRef(exc));
         }
         else if (PyObject_SetAttr(replacement, &_Py_ID(__notes__), notes) < 0) {
             PyErr_Clear();

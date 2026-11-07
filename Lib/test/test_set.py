@@ -710,7 +710,8 @@ class TestSet(TestJointOps, unittest.TestCase):
         self.assertEqual(str(cause), "custom failure")
         self.assertEqual(cause.__notes__, ["custom note"])
         self.assertIsNotNone(cause.__traceback__)
-        self.assertIs(cm.exception.__context__, cause)
+        # __cause__ retains the Python traceback; __context__ is not
+        # used as the reason to create the explicit chain.
 
         class PlainElement:
             def __hash__(self):
@@ -721,6 +722,19 @@ class TestSet(TestJointOps, unittest.TestCase):
             s.add(PlainElement())
         self.assertEqual(str(cm.exception.__cause__), "without notes")
         self.assertIsNotNone(cm.exception.__cause__.__traceback__)
+
+
+        # Context from an outer except block must not trigger a chain.
+        try:
+            1 / 0
+        except ZeroDivisionError as handled:
+            with self.assertRaisesRegex(TypeError,
+                                        "cannot use 'tuple' as a set element") as cm:
+                s.add(("alice", []))
+        self.assertIsNone(cm.exception.__cause__)
+        self.assertIs(cm.exception.__context__, handled)
+        self.assertEqual(cm.exception.__notes__,
+                         ["when hashing tuple item 1"])
 
     def test_hash_collision_remove_add(self):
         self.maxDiff = None

@@ -1727,7 +1727,8 @@ class DictTest(unittest.TestCase):
         self.assertEqual(str(cause), "custom failure")
         self.assertEqual(cause.__notes__, ["custom note"])
         self.assertIsNotNone(cause.__traceback__)
-        self.assertIs(cm.exception.__context__, cause)
+        # __cause__ retains the Python traceback; __context__ is not
+        # used as the reason to create the explicit chain.
 
         class PlainKey:
             def __hash__(self):
@@ -1738,6 +1739,20 @@ class DictTest(unittest.TestCase):
             d[PlainKey()] = 1
         self.assertEqual(str(cm.exception.__cause__), "without notes")
         self.assertIsNotNone(cm.exception.__cause__.__traceback__)
+
+
+        # A C-level failure inside an except clause has __context__ even
+        # though it lacks a traceback or an explicit __cause__.
+        try:
+            1 / 0
+        except ZeroDivisionError as handled:
+            with self.assertRaisesRegex(TypeError,
+                                        "cannot use 'tuple' as a dict key") as cm:
+                d[("alice", [])] = 1
+        self.assertIsNone(cm.exception.__cause__)
+        self.assertIs(cm.exception.__context__, handled)
+        self.assertEqual(cm.exception.__notes__,
+                         ["when hashing tuple item 1"])
 
     def test_clear_at_lookup(self):
         # gh-140551 dict crash if clear is called at lookup stage
