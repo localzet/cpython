@@ -22,8 +22,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - mode: debug-gil
-            free_threaded: false
           - mode: debug-free-threaded
             free_threaded: true
     steps:
