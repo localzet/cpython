@@ -558,7 +558,7 @@ class DictTest(unittest.TestCase):
 
     def test_sparse_dict_copy_threshold(self):
         for key_type in (str, int):
-            for remaining in (1, 10, 30, 31, 32, 33, 500):
+            for remaining in (1, 10, 14, 15, 16, 17, 30, 31, 32, 33, 500):
                 with self.subTest(key_type=key_type, remaining=remaining):
                     d = {key_type(i): i for i in range(1000)}
                     for i in range(1000 - remaining):

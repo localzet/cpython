@@ -4302,7 +4302,7 @@ PyDict_MergeFromSeq2(PyObject *d, PyObject *seq2, int override)
 static inline bool
 can_clone_sparse_dict(PyDictObject *mp)
 {
-    return mp->ma_used >= mp->ma_keys->dk_nentries / 32;
+    return mp->ma_used >= mp->ma_keys->dk_nentries / 64;
 }
 
 /* Clone only live entries from a combined table, preserving insertion order.
