@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - research/gh-161524-sparse-dict-copy
+    paths:
+      - Objects/dictobject.c
+      - Tools/scripts/bench_sparse_dict_copy.py
   workflow_dispatch:
 
 permissions:
