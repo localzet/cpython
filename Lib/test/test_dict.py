@@ -2061,6 +2061,19 @@ class FrozenDictTests(unittest.TestCase):
         self.assertEqual(d2, frozendict(x=1, y=2))
         self.assertEqual(type(d2), frozendict)
 
+    def test_copy_from_sparse_dict(self):
+        for keys in ([f'key{i}' for i in range(1000)], list(range(1000))):
+            source = {key: key for key in keys}
+            for key in keys[:700]:
+                del source[key]
+
+            expected = list(source.items())
+            d = frozendict(source)
+            self.assertEqual(list(d.items()), expected)
+            self.assertEqual(list(d.copy().items()), expected)
+            self.assertEqual(list(dict(d).items()), expected)
+            self.assertEqual(list(FrozenDict(d).copy().items()), expected)
+
     def test_merge(self):
         # test "a | b" operator
         self.assertEqual(frozendict(x=1) | frozendict(y=2),
