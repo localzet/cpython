@@ -1,0 +1,76 @@
+name: Sparse dict threshold experiment (fork only)
+
+on:
+  push:
+    branches:
+      - research/gh-161524-threshold-64
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sparse-dict-threshold-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  normal:
+    name: Compare 1/64 and 1/32 without PGO
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 32
+          persist-credentials: false
+      - name: Build 1/64 candidate
+        run: |
+          ./configure --without-ensurepip
+          make -j4
+          ./python -m test -j2 test_dict test_capi.test_dict
+      - name: Build 1/32 reference
+        run: |
+          git worktree add --detach ../reference ebacadc5fd88453f7749995ef48fadf3702203fd
+          (cd ../reference && ./configure --without-ensurepip && make -j4)
+      - name: Benchmark both orders
+        run: |
+          echo '=== CANDIDATE 1 ==='
+          ./python Tools/scripts/bench_sparse_dict_copy.py
+          echo '=== REFERENCE 1 ==='
+          (cd ../reference && ./python ../cpython/Tools/scripts/bench_sparse_dict_copy.py)
+          echo '=== REFERENCE 2 ==='
+          (cd ../reference && ./python ../cpython/Tools/scripts/bench_sparse_dict_copy.py)
+          echo '=== CANDIDATE 2 ==='
+          ./python Tools/scripts/bench_sparse_dict_copy.py
+
+  pgo:
+    name: Compare 1/64 and 1/32 with GCC PGO/LTO
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CC: gcc
+      CXX: g++
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 32
+          persist-credentials: false
+      - name: Build 1/64 candidate
+        run: |
+          ./configure --enable-optimizations --with-lto --without-ensurepip
+          make -j4
+          ./python -m test -j2 test_dict test_capi.test_dict
+      - name: Build 1/32 reference
+        run: |
+          git worktree add --detach ../reference ebacadc5fd88453f7749995ef48fadf3702203fd
+          (cd ../reference && ./configure --enable-optimizations --with-lto --without-ensurepip && make -j4)
+      - name: Benchmark both orders
+        run: |
+          echo '=== CANDIDATE 1 ==='
+          ./python Tools/scripts/bench_sparse_dict_copy.py
+          echo '=== REFERENCE 1 ==='
+          (cd ../reference && ./python ../cpython/Tools/scripts/bench_sparse_dict_copy.py)
+          echo '=== REFERENCE 2 ==='
+          (cd ../reference && ./python ../cpython/Tools/scripts/bench_sparse_dict_copy.py)
+          echo '=== CANDIDATE 2 ==='
+          ./python Tools/scripts/bench_sparse_dict_copy.py
