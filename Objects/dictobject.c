@@ -4297,7 +4297,8 @@ PyDict_MergeFromSeq2(PyObject *d, PyObject *seq2, int override)
 }
 
 
-/* Iterating live entries is cheaper when almost all entries were deleted. */
+/* The generic merge visits only live entries, so it is faster when
+   very few entries remain in the original table. */
 static inline bool
 can_clone_sparse_dict(PyDictObject *mp)
 {

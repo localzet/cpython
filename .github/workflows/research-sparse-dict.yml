@@ -27,6 +27,7 @@ jobs:
           ./configure --with-pydebug --without-ensurepip
           make -j4
           ./python -m test -j2 test_dict test_capi.test_dict
+          ./python Tools/scripts/stress_sparse_dict_copy.py
 
   free-threaded:
     name: Debug free-threaded correctness
@@ -41,6 +42,7 @@ jobs:
           ./configure --with-pydebug --disable-gil --without-ensurepip
           make -j4
           ./python -m test -j2 test_dict test_capi.test_dict
+          ./python Tools/scripts/stress_sparse_dict_copy.py
 
   benchmark:
     name: Non-debug benchmark against baseline
@@ -56,6 +58,7 @@ jobs:
           ./configure --without-ensurepip
           make -j4
           ./python -m test -j2 test_dict test_capi.test_dict
+          ./python Tools/scripts/stress_sparse_dict_copy.py
           echo '=== CANDIDATE ==='
           ./python Tools/scripts/bench_sparse_dict_copy.py
       - name: Build and benchmark baseline
