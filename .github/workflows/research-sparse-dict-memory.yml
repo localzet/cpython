@@ -1,0 +1,50 @@
+name: Sparse dict memory checks (fork only)
+
+on:
+  push:
+    branches:
+      - research/gh-161524-sparse-dict-copy
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sparse-dict-memory-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  refleaks:
+    name: Reference leak checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build debug interpreter
+        run: |
+          ./configure --with-pydebug --without-ensurepip
+          make -j4
+      - name: Check reference leaks
+        run: ./python -m test -R 3:3 test_dict test_capi.test_dict
+
+  asan:
+    name: AddressSanitizer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CC: clang
+      ASAN_OPTIONS: detect_leaks=0:allocator_may_return_null=1:halt_on_error=1:handle_segv=0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build instrumented interpreter
+        run: |
+          ./configure --with-pydebug --with-address-sanitizer --without-pymalloc --without-ensurepip
+          make -j4
+      - name: Test sparse dictionary operations
+        run: |
+          ./python -m test -j2 test_dict test_capi.test_dict
+          ./python Tools/scripts/stress_sparse_dict_copy.py
