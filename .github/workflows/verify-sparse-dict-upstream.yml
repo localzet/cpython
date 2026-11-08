@@ -22,8 +22,8 @@ jobs:
         run: |
           ./configure --with-pydebug --without-ensurepip
           make -j4
-          ./python -m test -j2 test_dict test_capi.test_dict
-          ./python -m test -R 3:3 test_dict test_capi.test_dict
+          ./python -m test -j2 test_dict test_capi.test_dict test_capi.test_watchers
+          ./python -m test -R 3:3 test_dict test_capi.test_dict test_capi.test_watchers
 
   free-threaded:
     name: Debug free-threaded
@@ -37,7 +37,7 @@ jobs:
         run: |
           ./configure --with-pydebug --disable-gil --without-ensurepip
           make -j4
-          ./python -m test -j2 test_dict test_capi.test_dict
+          ./python -m test -j2 test_dict test_capi.test_dict test_capi.test_watchers
 
   asan:
     name: AddressSanitizer
@@ -54,4 +54,4 @@ jobs:
         run: |
           ./configure --with-pydebug --with-address-sanitizer --without-pymalloc --without-ensurepip
           make -j4
-          ./python -m test -j2 test_dict test_capi.test_dict
+          ./python -m test -j2 test_dict test_capi.test_dict test_capi.test_watchers
