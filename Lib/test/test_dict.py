@@ -88,22 +88,34 @@ class DictTest(unittest.TestCase):
 
 
     def test_sparse_dict_copy(self):
-        # Check both specialized unicode and general-key tables.
+        for keys in ([f'key{i}' for i in range(120)], list(range(120))):
+            for remaining in (0, 1, 10, 40, 80, 119, 120):
+                with self.subTest(key_type=type(keys[0]), remaining=remaining):
+                    source = {key: object() for key in keys}
+                    for key in keys[:120 - remaining]:
+                        del source[key]
+
+                    expected = list(source.items())
+                    for result in (source.copy(), dict(source), {**source}):
+                        self.assertIsNot(result, source)
+                        self.assertEqual(list(result.items()), expected)
+                        for (_, value), (_, copied) in zip(
+                                expected, result.items()):
+                            self.assertIs(copied, value)
+                        result.clear()
+                        self.assertEqual(list(source.items()), expected)
+
+    def test_sparse_dict_copy_reinserted_keys(self):
         for keys in ([f'key{i}' for i in range(120)], list(range(120))):
             source = {key: object() for key in keys}
-            for key in keys[:80]:
+            for key in keys[:100]:
                 del source[key]
+            for key in keys[:5]:
+                source[key] = object()
 
             expected = list(source.items())
             for result in (source.copy(), dict(source), {**source}):
-                self.assertIsNot(result, source)
-                self.assertEqual(list(result.keys()),
-                                 [key for key, _ in expected])
-                for (_, value), (_, copied) in zip(expected, result.items()):
-                    self.assertIs(copied, value)
-                self.assertEqual(len(result), len(expected))
-                result.clear()
-                self.assertEqual(list(source.items()), expected)
+                self.assertEqual(list(result.items()), expected)
 
     def test_sparse_dict_copy_does_not_rehash(self):
         class Key:
@@ -130,6 +142,32 @@ class DictTest(unittest.TestCase):
                     expected, result.items()):
                 self.assertIs(copy_key, key)
                 self.assertEqual(copy_value, value)
+
+    def test_sparse_dict_copy_releases_references(self):
+        class Key:
+            pass
+
+        class Value:
+            pass
+
+        key = Key()
+        value = Value()
+        source = {i: None for i in range(150)}
+        source[key] = value
+        for i in range(150):
+            del source[i]
+
+        key_ref = weakref.ref(key)
+        value_ref = weakref.ref(value)
+        copies = [source.copy(), dict(source), {**source}]
+        del source, key, value
+
+        self.assertIsNotNone(key_ref())
+        self.assertIsNotNone(value_ref())
+        copies.clear()
+        gc.collect()
+        self.assertIsNone(key_ref())
+        self.assertIsNone(value_ref())
 
     def test_keys(self):
         d = {}
