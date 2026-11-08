@@ -1,0 +1,45 @@
+name: Sparse dict optimized benchmark (fork only)
+
+on:
+  push:
+    branches:
+      - research/gh-161524-sparse-dict-copy
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sparse-dict-optimized-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  optimized:
+    name: PGO and ThinLTO comparison
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CC: clang
+      CXX: clang++
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 32
+          persist-credentials: false
+      - name: Build candidate
+        run: |
+          ./configure --enable-optimizations --with-lto=thin --without-ensurepip
+          make -j4
+          ./python -m test -j2 test_dict test_capi.test_dict
+      - name: Build baseline
+        run: |
+          git worktree add --detach ../baseline 3c92a06e0d08f482f1e368a41670404ef5d247da
+          cd ../baseline
+          ./configure --enable-optimizations --with-lto=thin --without-ensurepip
+          make -j4
+      - name: Compare performance
+        run: |
+          echo '=== CANDIDATE PGO THINLTO ==='
+          ./python Tools/scripts/bench_sparse_dict_copy.py
+          echo '=== BASELINE PGO THINLTO ==='
+          (cd ../baseline && ./python ../cpython/Tools/scripts/bench_sparse_dict_copy.py)
