@@ -15,12 +15,12 @@ concurrency:
 
 jobs:
   optimized:
-    name: PGO and ThinLTO comparison
+    name: GCC PGO and LTO comparison
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
-      CC: clang
-      CXX: clang++
+      CC: gcc
+      CXX: g++
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -28,18 +28,18 @@ jobs:
           persist-credentials: false
       - name: Build candidate
         run: |
-          ./configure --enable-optimizations --with-lto=thin --without-ensurepip
+          ./configure --enable-optimizations --with-lto --without-ensurepip
           make -j4
           ./python -m test -j2 test_dict test_capi.test_dict
       - name: Build baseline
         run: |
           git worktree add --detach ../baseline 3c92a06e0d08f482f1e368a41670404ef5d247da
           cd ../baseline
-          ./configure --enable-optimizations --with-lto=thin --without-ensurepip
+          ./configure --enable-optimizations --with-lto --without-ensurepip
           make -j4
       - name: Compare performance
         run: |
-          echo '=== CANDIDATE PGO THINLTO ==='
+          echo '=== CANDIDATE PGO LTO ==='
           ./python Tools/scripts/bench_sparse_dict_copy.py
-          echo '=== BASELINE PGO THINLTO ==='
+          echo '=== BASELINE PGO LTO ==='
           (cd ../baseline && ./python ../cpython/Tools/scripts/bench_sparse_dict_copy.py)
