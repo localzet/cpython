@@ -1,7 +1,8 @@
-"""Local research benchmark for gh-161524; not an upstream performance claim."""
+"""Compare dictionary copy paths for gh-161524."""
+
+import platform
 from statistics import median
 from timeit import repeat
-import platform
 
 
 def sparse_dict(total, live, kind):
@@ -14,15 +15,15 @@ def sparse_dict(total, live, kind):
 
 def main():
     print(platform.python_version(), platform.python_build(), flush=True)
-    for total, live in [(10, 4), (1000, 50), (1000, 300),
-                        (100000, 30000), (100000, 10)]:
+    for total, live in ((10, 4), (1000, 50), (1000, 300), (1000, 1000),
+                        (100000, 30000), (100000, 10), (100000, 1)):
         for kind in ("str", "int"):
             source = sparse_dict(total, live, kind)
-            for name, expr in [
+            for name, expr in (
                 ("copy", "source.copy()"),
                 ("ctor", "dict(source)"),
                 ("unpack", "{**source}"),
-            ]:
+            ):
                 number = 500 if total <= 1000 else 20
                 seconds = median(repeat(expr, globals={"source": source},
                                         number=number, repeat=7))
