@@ -4297,6 +4297,13 @@ PyDict_MergeFromSeq2(PyObject *d, PyObject *seq2, int override)
 }
 
 
+/* Iterating live entries is cheaper when almost all entries were deleted. */
+static inline bool
+can_clone_sparse_dict(PyDictObject *mp)
+{
+    return mp->ma_used >= mp->ma_keys->dk_nentries / 32;
+}
+
 /* Clone only live entries from a combined table, preserving insertion order.
    The source is locked while its keys and values are referenced. */
 static PyDictKeysObject *
@@ -4370,7 +4377,8 @@ dict_dict_merge(PyDictObject *mp, PyDictObject *other, int override, PyObject **
         PyDictKeysObject *okeys = other->ma_keys;
 
         // Clone a combined table directly, compacting deleted entries.
-        if (mp->ma_values == NULL && other->ma_values == NULL) {
+        if (mp->ma_values == NULL && other->ma_values == NULL &&
+            can_clone_sparse_dict(other)) {
             _PyDict_NotifyEvent(PyDict_EVENT_CLONED, mp, (PyObject *)other, NULL);
             PyDictKeysObject *keys;
             if (other->ma_used == okeys->dk_nentries &&
@@ -4676,7 +4684,8 @@ copy_lock_held_untracked(PyObject *o, int as_frozendict)
         return (PyObject *)split_copy;
     }
 
-    if (Py_TYPE(mp)->tp_iter == dict_iter && mp->ma_values == NULL)
+    if (Py_TYPE(mp)->tp_iter == dict_iter &&
+        mp->ma_values == NULL && can_clone_sparse_dict(mp))
     {
         /* Clone compact tables as-is, but omit deleted entries from sparse
            tables so copying an almost emptied dict stays inexpensive. */
