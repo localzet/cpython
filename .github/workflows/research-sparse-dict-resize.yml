@@ -1,0 +1,26 @@
+name: Sparse dict resize research (fork only)
+
+on:
+  push:
+    branches:
+      - research/gh-161524-dictresize
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Forced resize after deletions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build CPython
+        run: |
+          ./configure --without-ensurepip
+          make -j4
+      - name: Measure sparse resize
+        run: ./python Tools/scripts/bench_sparse_dict_resize.py
