@@ -1,0 +1,54 @@
+name: Profile dict.copy() frequency in pyperformance (fork only)
+
+on:
+  push:
+    branches:
+      - research/gh-161524-pyperformance-profile
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pyperformance:
+    name: Profile selected official pyperformance workloads
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - name: Checkout research-only instrumented CPython
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build CPython
+        run: |
+          ./configure --without-ensurepip
+          make -j4
+          ./python -c 'import sys; print(sys.version)'
+      - name: Install official pyperformance driver
+        run: |
+          python3 -m venv .venv-driver
+          .venv-driver/bin/python -m pip install --disable-pip-version-check pyperformance==1.14.0
+          .venv-driver/bin/python -m pyperformance list -b logging,django_template,json_dumps,sqlalchemy_declarative,xml_etree
+      - name: Run real benchmark workloads and summarize copies
+        shell: bash
+        run: |
+          mkdir -p profile
+          successes=0
+          failures=0
+          for bm in logging django_template json_dumps sqlalchemy_declarative xml_etree; do
+            echo "=== BENCHMARK: $bm ==="
+            export CPYTHON_DICT_COPY_PROFILE_PATH="$PWD/profile/$bm.log"
+            rm -f "$CPYTHON_DICT_COPY_PROFILE_PATH"
+            if .venv-driver/bin/python -m pyperformance run \
+                --python "$PWD/python" --benchmarks "$bm" --fast \
+                --timeout 180 --inherit-environ CPYTHON_DICT_COPY_PROFILE_PATH \
+                -o "profile/$bm.json"; then
+              successes=$((successes + 1))
+            else
+              echo "Benchmark failed: $bm (possible pre-release Python or dependency incompatibility)"
+              failures=$((failures + 1))
+            fi
+            python3 Tools/scripts/summarize_dict_copy_profile.py "$CPYTHON_DICT_COPY_PROFILE_PATH"
+          done
+          echo "=== BENCHMARK SUMMARY successes=$successes failures=$failures ==="
+          test "$successes" -ge 2
