@@ -1,0 +1,34 @@
+name: Profile real dict.copy() density in stdlib tests (fork only)
+
+on:
+  push:
+    branches:
+      - research/gh-161524-copy-profile
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  profile:
+    name: Instrument regular CPython running stdlib tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build regular CPython with research counters
+        run: |
+          ./configure --without-ensurepip
+          make -j4
+      - name: CPython stdlib test workloads
+        run: |
+          for suite in test_linecache test_weakref test_logging test_unittest test_importlib; do
+            echo "=== PROFILE SUITE: $suite ==="
+            ./python -m test -q "$suite"
+          done
+      - name: Source compilation workload
+        run: |
+          echo '=== PROFILE WORKLOAD: compileall ==='
+          ./python -m compileall -q -j 1 Lib
