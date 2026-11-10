@@ -65,20 +65,22 @@ class TestDictWatchers(unittest.TestCase):
 
     def test_clone_sparse_dict(self):
         for keys in (list(range(200)), [f"key{i}" for i in range(200)]):
-            with self.subTest(key_type=type(keys[0])):
-                source = {key: key for key in keys}
-                for key in keys[:180]:
-                    del source[key]
+            for remaining in (1, 20):
+                with self.subTest(key_type=type(keys[0]),
+                                  remaining=remaining):
+                    source = {key: key for key in keys}
+                    for key in keys[:200 - remaining]:
+                        del source[key]
 
-                target = {}
-                with self.watcher() as wid:
-                    self.watch(wid, target)
-                    target.update(source)
-                    self.assert_events(["clone"])
+                    target = {}
+                    with self.watcher() as wid:
+                        self.watch(wid, target)
+                        target.update(source)
+                        self.assert_events(["clone"])
 
-                self.assertEqual(list(target.items()), list(source.items()))
-                source.clear()
-                self.assertEqual(len(target), 20)
+                    self.assertEqual(list(target.items()), list(source.items()))
+                    source.clear()
+                    self.assertEqual(len(target), remaining)
 
     def test_no_event_if_not_watched(self):
         d = {}
