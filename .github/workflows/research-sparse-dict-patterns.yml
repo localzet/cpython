@@ -1,0 +1,40 @@
+name: Sparse dict deletion pattern benchmark (fork only)
+
+on:
+  push:
+    branches:
+      - research/gh-161524-skip-while-patterns
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  patterns:
+    name: Compare deletion patterns (regular)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 16
+          persist-credentials: false
+      - name: Build while-loop without guard
+        run: |
+          ./configure --without-ensurepip
+          make -j4
+          ./python -m test -j2 test_dict test_capi.test_dict test_capi.test_watchers
+      - name: Build old for-loop with guard
+        run: |
+          git worktree add --detach ../for-guard 540cab8c162ea46581224da6f1a2d2783277fdd7
+          (cd ../for-guard && ./configure --without-ensurepip && make -j4)
+      - name: Benchmark both orders
+        run: |
+          echo '=== WHILE_ALWAYS 1 ==='
+          ./python Tools/scripts/bench_sparse_dict_patterns.py
+          echo '=== FOR_GUARD 1 ==='
+          (cd ../for-guard && ./python ../cpython/Tools/scripts/bench_sparse_dict_patterns.py)
+          echo '=== FOR_GUARD 2 ==='
+          (cd ../for-guard && ./python ../cpython/Tools/scripts/bench_sparse_dict_patterns.py)
+          echo '=== WHILE_ALWAYS 2 ==='
+          ./python Tools/scripts/bench_sparse_dict_patterns.py
