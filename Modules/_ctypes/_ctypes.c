@@ -2524,9 +2524,6 @@ PyCSimpleType_init(PyObject *self, PyObject *args, PyObject *kwds)
             return -1;
         }
         Py_DECREF(swapped);
-        if (sw_info->format == NULL) {
-            return -1;
-        }
     };
 
     return 0;
