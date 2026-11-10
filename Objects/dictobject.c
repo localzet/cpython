@@ -4296,6 +4296,70 @@ PyDict_MergeFromSeq2(PyObject *d, PyObject *seq2, int override)
     return dict_merge_from_seq2(d, seq2, override);
 }
 
+
+/* The generic merge visits only live entries, so it is faster when
+   very few entries remain in the original table. */
+static inline bool
+can_clone_sparse_dict(PyDictObject *mp)
+{
+    return mp->ma_used >= mp->ma_keys->dk_nentries / 64;
+}
+
+/* Clone only live entries from a combined table, preserving insertion order.
+   The source is locked while its keys and values are referenced. */
+static PyDictKeysObject *
+clone_compact_dict_keys(PyDictObject *orig)
+{
+    assert(PyAnyDict_Check(orig));
+    assert(Py_TYPE(orig)->tp_iter == dict_iter);
+    assert(orig->ma_values == NULL);
+    assert(orig->ma_used > 0);
+    if (!PyFrozenDict_Check(orig)) {
+        ASSERT_DICT_LOCKED(orig);
+    }
+
+    PyDictKeysObject *oldkeys = orig->ma_keys;
+    Py_ssize_t used = orig->ma_used;
+    int unicode = DK_IS_UNICODE(oldkeys);
+    PyDictKeysObject *keys = new_keys_object(estimate_log2_keysize(used),
+                                            unicode);
+    if (keys == NULL) {
+        return NULL;
+    }
+
+    Py_ssize_t n = 0;
+    if (unicode) {
+        PyDictUnicodeEntry *src = DK_UNICODE_ENTRIES(oldkeys);
+        PyDictUnicodeEntry *dst = DK_UNICODE_ENTRIES(keys);
+        for (Py_ssize_t i = 0; i < oldkeys->dk_nentries; i++) {
+            if (src[i].me_value != NULL) {
+                dst[n].me_key = Py_NewRef(src[i].me_key);
+                dst[n].me_value = Py_NewRef(src[i].me_value);
+                n++;
+            }
+        }
+        assert(n == used);
+        build_indices_unicode(keys, dst, n);
+    }
+    else {
+        PyDictKeyEntry *src = DK_ENTRIES(oldkeys);
+        PyDictKeyEntry *dst = DK_ENTRIES(keys);
+        for (Py_ssize_t i = 0; i < oldkeys->dk_nentries; i++) {
+            if (src[i].me_value != NULL) {
+                dst[n].me_key = Py_NewRef(src[i].me_key);
+                dst[n].me_hash = src[i].me_hash;
+                dst[n].me_value = Py_NewRef(src[i].me_value);
+                n++;
+            }
+        }
+        assert(n == used);
+        build_indices_generic(keys, dst, n);
+    }
+    keys->dk_nentries = n;
+    keys->dk_usable -= n;
+    return keys;
+}
+
 static int
 dict_dict_merge(PyDictObject *mp, PyDictObject *other, int override, PyObject **dupkey)
 {
@@ -4315,15 +4379,19 @@ dict_dict_merge(PyDictObject *mp, PyDictObject *other, int override, PyObject **
         override = 1;
         PyDictKeysObject *okeys = other->ma_keys;
 
-        // If other is clean, combined, and just allocated, just clone it.
-        if (mp->ma_values == NULL &&
-            other->ma_values == NULL &&
-            other->ma_used == okeys->dk_nentries &&
-            (DK_LOG_SIZE(okeys) == PyDict_LOG_MINSIZE ||
-             USABLE_FRACTION(DK_SIZE(okeys)/2) < other->ma_used)
-        ) {
+        // Clone a combined table directly, compacting deleted entries.
+        if (mp->ma_values == NULL && other->ma_values == NULL &&
+            can_clone_sparse_dict(other)) {
             _PyDict_NotifyEvent(PyDict_EVENT_CLONED, mp, (PyObject *)other, NULL);
-            PyDictKeysObject *keys = clone_combined_dict_keys(other);
+            PyDictKeysObject *keys;
+            if (other->ma_used == okeys->dk_nentries &&
+                (DK_LOG_SIZE(okeys) == PyDict_LOG_MINSIZE ||
+                 USABLE_FRACTION(DK_SIZE(okeys)/2) < other->ma_used)) {
+                keys = clone_combined_dict_keys(other);
+            }
+            else {
+                keys = clone_compact_dict_keys(other);
+            }
             if (keys == NULL)
                 return -1;
 
@@ -4620,24 +4688,17 @@ copy_lock_held_untracked(PyObject *o, int as_frozendict)
     }
 
     if (Py_TYPE(mp)->tp_iter == dict_iter &&
-            mp->ma_values == NULL &&
-            (mp->ma_used >= (mp->ma_keys->dk_nentries * 2) / 3))
+        mp->ma_values == NULL && can_clone_sparse_dict(mp))
     {
-        /* Use fast-copy if:
-
-           (1) type(mp) doesn't override tp_iter; and
-
-           (2) 'mp' is not a split-dict; and
-
-           (3) if 'mp' is non-compact ('del' operation does not resize dicts),
-               do fast-copy only if it has at most 1/3 non-used keys.
-
-           The last condition (3) is important to guard against a pathological
-           case when a large dict is almost emptied with multiple del/pop
-           operations and copied after that.  In cases like this, we defer to
-           PyDict_Merge, which produces a compacted copy.
-        */
-        PyDictKeysObject *keys = clone_combined_dict_keys(mp);
+        /* Clone compact tables as-is, but omit deleted entries from sparse
+           tables so copying an almost emptied dict stays inexpensive. */
+        PyDictKeysObject *keys;
+        if (mp->ma_used >= (mp->ma_keys->dk_nentries * 2) / 3) {
+            keys = clone_combined_dict_keys(mp);
+        }
+        else {
+            keys = clone_compact_dict_keys(mp);
+        }
         if (keys == NULL) {
             return NULL;
         }
