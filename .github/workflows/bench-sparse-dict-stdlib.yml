@@ -1,0 +1,50 @@
+name: Benchmark sparse dict stdlib workloads (fork only)
+
+on:
+  push:
+    branches:
+      - research/gh-161524-stdlib-workloads
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    name: Compare original and compact-clone (regular build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout patched interpreter
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: eea926600a18c50b376cc08626320328cb62a840
+          path: patched
+          persist-credentials: false
+      - name: Checkout base interpreter
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 4575fb91eab84ec8ee02b7cad7c38b309006a010
+          path: baseline
+          persist-credentials: false
+      - name: Build patched interpreter
+        working-directory: patched
+        run: |
+          ./configure --without-ensurepip
+          make -j4
+          ./python -m test -j2 test_dict test_capi.test_dict test_capi.test_watchers
+      - name: Build base interpreter
+        working-directory: baseline
+        run: |
+          ./configure --without-ensurepip
+          make -j4
+      - name: Compare under the same runner in A-B-B-A order
+        run: |
+          echo '=== BASELINE 1 ==='
+          (cd baseline && ./python ../patched/Tools/scripts/bench_sparse_dict_realworld.py)
+          echo '=== PATCHED 1 ==='
+          (cd patched && ./python Tools/scripts/bench_sparse_dict_realworld.py)
+          echo '=== PATCHED 2 ==='
+          (cd patched && ./python Tools/scripts/bench_sparse_dict_realworld.py)
+          echo '=== BASELINE 2 ==='
+          (cd baseline && ./python ../patched/Tools/scripts/bench_sparse_dict_realworld.py)
