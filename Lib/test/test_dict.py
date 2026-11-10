@@ -526,6 +526,30 @@ class DictTest(unittest.TestCase):
                             copy.clear()
                             self.assertEqual(list(source.items()), expected)
 
+    def test_sparse_dict_merge_overridden_iter(self):
+        class ReversedIterationDict(dict):
+            def __iter__(self):
+                return iter(reversed(list(dict.keys(self))))
+
+        for keys in (list(range(120)), [f"key{i}" for i in range(120)]):
+            with self.subTest(key_type=type(keys[0])):
+                source = ReversedIterationDict(
+                    (key, key) for key in keys
+                )
+                for key in keys[:100]:
+                    del source[key]
+
+                expected = list(source.items())
+                self.assertNotEqual(list(source), list(source.keys()))
+                for result in (dict(source), {**source}):
+                    self.assertEqual(list(result.items()), expected)
+
+                target = {}
+                target.update(source)
+                self.assertEqual(list(target.items()), expected)
+                source.clear()
+                self.assertEqual(len(target), 20)
+
     def test_sparse_dict_copy_reinserted_keys(self):
         for keys in ([f'key{i}' for i in range(120)], list(range(120))):
             source = {key: object() for key in keys}
