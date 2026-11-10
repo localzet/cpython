@@ -4331,12 +4331,14 @@ clone_compact_dict_keys(PyDictObject *orig)
     if (unicode) {
         PyDictUnicodeEntry *src = DK_UNICODE_ENTRIES(oldkeys);
         PyDictUnicodeEntry *dst = DK_UNICODE_ENTRIES(keys);
-        for (Py_ssize_t i = 0; i < oldkeys->dk_nentries; i++) {
-            if (src[i].me_value != NULL) {
-                dst[n].me_key = Py_NewRef(src[i].me_key);
-                dst[n].me_value = Py_NewRef(src[i].me_value);
-                n++;
+        for (Py_ssize_t i = 0; n < used; i++) {
+            while (src[i].me_value == NULL) {
+                i++;
             }
+            assert(i < oldkeys->dk_nentries);
+            dst[n].me_key = Py_NewRef(src[i].me_key);
+            dst[n].me_value = Py_NewRef(src[i].me_value);
+            n++;
         }
         assert(n == used);
         build_indices_unicode(keys, dst, n);
@@ -4344,13 +4346,15 @@ clone_compact_dict_keys(PyDictObject *orig)
     else {
         PyDictKeyEntry *src = DK_ENTRIES(oldkeys);
         PyDictKeyEntry *dst = DK_ENTRIES(keys);
-        for (Py_ssize_t i = 0; i < oldkeys->dk_nentries; i++) {
-            if (src[i].me_value != NULL) {
-                dst[n].me_key = Py_NewRef(src[i].me_key);
-                dst[n].me_hash = src[i].me_hash;
-                dst[n].me_value = Py_NewRef(src[i].me_value);
-                n++;
+        for (Py_ssize_t i = 0; n < used; i++) {
+            while (src[i].me_value == NULL) {
+                i++;
             }
+            assert(i < oldkeys->dk_nentries);
+            dst[n].me_key = Py_NewRef(src[i].me_key);
+                dst[n].me_hash = src[i].me_hash;
+            dst[n].me_value = Py_NewRef(src[i].me_value);
+            n++;
         }
         assert(n == used);
         build_indices_generic(keys, dst, n);
