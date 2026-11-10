@@ -153,14 +153,23 @@ static struct {
 static void
 report_dict_copy_profile(void)
 {
-    fprintf(stderr, "DICT_COPY_PROFILE total=%llu empty=%llu split=%llu "
-                    "compact=%llu light_deletions=%llu sparse=%llu "
-                    "sparse_large=%llu very_sparse=%llu\n",
+    const char *path = getenv("CPYTHON_DICT_COPY_PROFILE_PATH");
+    if (path == NULL || path[0] == '\0') {
+        return;
+    }
+    FILE *out = fopen(path, "a");
+    if (out == NULL) {
+        return;
+    }
+    fprintf(out, "DICT_COPY_PROFILE total=%llu empty=%llu split=%llu "
+                 "compact=%llu light_deletions=%llu sparse=%llu "
+                 "sparse_large=%llu very_sparse=%llu\n",
             dict_copy_profile.total, dict_copy_profile.empty,
             dict_copy_profile.split, dict_copy_profile.compact,
             dict_copy_profile.light_deletions,
             dict_copy_profile.sparse, dict_copy_profile.sparse_large,
             dict_copy_profile.very_sparse);
+    fclose(out);
 }
 
 static void
