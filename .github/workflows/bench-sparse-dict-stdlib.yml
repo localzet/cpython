@@ -18,7 +18,7 @@ jobs:
       - name: Checkout patched interpreter
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: eea926600a18c50b376cc08626320328cb62a840
+          ref: research/gh-161524-stdlib-workloads
           path: patched
           persist-credentials: false
       - name: Checkout base interpreter
