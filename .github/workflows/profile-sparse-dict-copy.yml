@@ -26,9 +26,19 @@ jobs:
         run: |
           for suite in test_linecache test_weakref test_logging test_unittest test_importlib; do
             echo "=== PROFILE SUITE: $suite ==="
+            export CPYTHON_DICT_COPY_PROFILE_PATH="$PWD/profile-$suite.log"
+            rm -f "$CPYTHON_DICT_COPY_PROFILE_PATH"
             ./python -m test -q "$suite"
+            if test -f "$CPYTHON_DICT_COPY_PROFILE_PATH"; then
+              cat "$CPYTHON_DICT_COPY_PROFILE_PATH"
+            fi
           done
       - name: Source compilation workload
         run: |
           echo '=== PROFILE WORKLOAD: compileall ==='
+          export CPYTHON_DICT_COPY_PROFILE_PATH="$PWD/profile-compileall.log"
+          rm -f "$CPYTHON_DICT_COPY_PROFILE_PATH"
           ./python -m compileall -q -j 1 Lib
+          if test -f "$CPYTHON_DICT_COPY_PROFILE_PATH"; then
+            cat "$CPYTHON_DICT_COPY_PROFILE_PATH"
+          fi
