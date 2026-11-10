@@ -137,8 +137,8 @@ As a consequence of this, split keys have a maximum size of 16.
 #include <stdio.h>
 #include <stdlib.h>
 
-/* Temporary research-only counters for copies in copy_lock_held_untracked().
-   These do not count dict(d) and dictionary unpacking. */
+/* Temporary research-only counters for explicit copies and clone candidates
+   in dict_dict_merge(). The groups may overlap on the fallback path. */
 static struct {
     unsigned long long total;
     unsigned long long empty;
@@ -148,6 +148,9 @@ static struct {
     unsigned long long sparse;
     unsigned long long sparse_large;
     unsigned long long very_sparse;
+    unsigned long long merge_candidates;
+    unsigned long long merge_sparse;
+    unsigned long long merge_sparse_large;
 } dict_copy_profile;
 
 static void
@@ -163,23 +166,34 @@ report_dict_copy_profile(void)
     }
     fprintf(out, "DICT_COPY_PROFILE total=%llu empty=%llu split=%llu "
                  "compact=%llu light_deletions=%llu sparse=%llu "
-                 "sparse_large=%llu very_sparse=%llu\n",
+                 "sparse_large=%llu very_sparse=%llu "
+                 "merge_candidates=%llu merge_sparse=%llu "
+                 "merge_sparse_large=%llu\n",
             dict_copy_profile.total, dict_copy_profile.empty,
             dict_copy_profile.split, dict_copy_profile.compact,
             dict_copy_profile.light_deletions,
             dict_copy_profile.sparse, dict_copy_profile.sparse_large,
-            dict_copy_profile.very_sparse);
+            dict_copy_profile.very_sparse,
+            dict_copy_profile.merge_candidates,
+            dict_copy_profile.merge_sparse,
+            dict_copy_profile.merge_sparse_large);
     fclose(out);
 }
 
 static void
-record_dict_copy_profile(PyDictObject *mp)
+register_dict_copy_profile(void)
 {
     static int registered = 0;
     if (!registered) {
         registered = 1;
         (void)atexit(report_dict_copy_profile);
     }
+}
+
+static void
+record_dict_copy_profile(PyDictObject *mp)
+{
+    register_dict_copy_profile();
     dict_copy_profile.total++;
     if (mp->ma_used == 0) {
         dict_copy_profile.empty++;
@@ -204,6 +218,25 @@ record_dict_copy_profile(PyDictObject *mp)
         }
         if (used < n / 16) {
             dict_copy_profile.very_sparse++;
+        }
+    }
+}
+
+static void
+record_dict_merge_profile(PyDictObject *mp, PyDictObject *other)
+{
+    if (mp->ma_used != 0 || other->ma_used == 0 ||
+        mp->ma_values != NULL || other->ma_values != NULL) {
+        return;
+    }
+    register_dict_copy_profile();
+    dict_copy_profile.merge_candidates++;
+    Py_ssize_t n = other->ma_keys->dk_nentries;
+    Py_ssize_t used = other->ma_used;
+    if (used < (n * 2) / 3) {
+        dict_copy_profile.merge_sparse++;
+        if (n >= 64) {
+            dict_copy_profile.merge_sparse_large++;
         }
     }
 }
@@ -4374,6 +4407,7 @@ static int
 dict_dict_merge(PyDictObject *mp, PyDictObject *other, int override, PyObject **dupkey)
 {
     assert(can_modify_dict(mp));
+    record_dict_merge_profile(mp, other);
     if (!PyFrozenDict_Check(other)) {
         ASSERT_DICT_LOCKED(other);
     }
