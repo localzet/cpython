@@ -38,7 +38,7 @@ jobs:
           echo '=== PROFILE WORKLOAD: compileall ==='
           export CPYTHON_DICT_COPY_PROFILE_PATH="$PWD/profile-compileall.log"
           rm -f "$CPYTHON_DICT_COPY_PROFILE_PATH"
-          ./python -m compileall -q -j 1 Lib
+          ./python -m compileall -q -j 1 Lib/asyncio Lib/email Lib/http Lib/json Lib/importlib Lib/collections Lib/urllib
           if test -f "$CPYTHON_DICT_COPY_PROFILE_PATH"; then
             cat "$CPYTHON_DICT_COPY_PROFILE_PATH"
           fi
