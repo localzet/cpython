@@ -1,0 +1,102 @@
+name: Sparse dict skip-loop experiment (fork only)
+
+on:
+  push:
+    branches:
+      - research/gh-161524-skip-while-always
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  normal:
+    name: Compare three variants (regular)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 12
+      - name: Build while-loop without guard
+        run: |
+          ./configure --without-ensurepip
+          make -j4
+          ./python -m test -j2 test_dict test_capi.test_dict test_capi.test_watchers
+      - name: Build while-loop with guard
+        run: |
+          git worktree add --detach ../while-guard ee0d95ea2b73e977050f4702010f14ff1e30522b
+          (cd ../while-guard && ./configure --without-ensurepip && make -j4)
+      - name: Build original for-loop with guard
+        run: |
+          git worktree add --detach ../for-guard 540cab8c162ea46581224da6f1a2d2783277fdd7
+          (cd ../for-guard && ./configure --without-ensurepip && make -j4)
+      - name: Compare variants in forward and reverse order
+        run: |
+          echo '=== WHILE_ALWAYS 1 ==='
+          ./python Tools/scripts/bench_sparse_dict_skip_loop.py
+          echo '=== WHILE_GUARD 1 ==='
+          (cd ../while-guard && ./python ../cpython/Tools/scripts/bench_sparse_dict_skip_loop.py)
+          echo '=== FOR_GUARD 1 ==='
+          (cd ../for-guard && ./python ../cpython/Tools/scripts/bench_sparse_dict_skip_loop.py)
+          echo '=== FOR_GUARD 2 ==='
+          (cd ../for-guard && ./python ../cpython/Tools/scripts/bench_sparse_dict_skip_loop.py)
+          echo '=== WHILE_GUARD 2 ==='
+          (cd ../while-guard && ./python ../cpython/Tools/scripts/bench_sparse_dict_skip_loop.py)
+          echo '=== WHILE_ALWAYS 2 ==='
+          ./python Tools/scripts/bench_sparse_dict_skip_loop.py
+
+  pgo:
+    name: Compare three variants (GCC PGO/LTO)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CC: gcc
+      CXX: g++
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 12
+      - name: Build while-loop without guard
+        run: |
+          ./configure --enable-optimizations --with-lto --without-ensurepip
+          make -j4
+          ./python -m test -j2 test_dict test_capi.test_dict test_capi.test_watchers
+      - name: Build while-loop with guard
+        run: |
+          git worktree add --detach ../while-guard ee0d95ea2b73e977050f4702010f14ff1e30522b
+          (cd ../while-guard && ./configure --enable-optimizations --with-lto --without-ensurepip && make -j4)
+      - name: Build original for-loop with guard
+        run: |
+          git worktree add --detach ../for-guard 540cab8c162ea46581224da6f1a2d2783277fdd7
+          (cd ../for-guard && ./configure --enable-optimizations --with-lto --without-ensurepip && make -j4)
+      - name: Compare variants in forward and reverse order
+        run: |
+          echo '=== WHILE_ALWAYS 1 ==='
+          ./python Tools/scripts/bench_sparse_dict_skip_loop.py
+          echo '=== WHILE_GUARD 1 ==='
+          (cd ../while-guard && ./python ../cpython/Tools/scripts/bench_sparse_dict_skip_loop.py)
+          echo '=== FOR_GUARD 1 ==='
+          (cd ../for-guard && ./python ../cpython/Tools/scripts/bench_sparse_dict_skip_loop.py)
+          echo '=== FOR_GUARD 2 ==='
+          (cd ../for-guard && ./python ../cpython/Tools/scripts/bench_sparse_dict_skip_loop.py)
+          echo '=== WHILE_GUARD 2 ==='
+          (cd ../while-guard && ./python ../cpython/Tools/scripts/bench_sparse_dict_skip_loop.py)
+          echo '=== WHILE_ALWAYS 2 ==='
+          ./python Tools/scripts/bench_sparse_dict_skip_loop.py
+
+  free-threaded:
+    name: Free-threaded correctness with skip-loop
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test debug free-threaded interpreter
+        run: |
+          ./configure --disable-gil --with-pydebug --without-ensurepip
+          make -j4
+          ./python -m test -j2 test_dict test_capi.test_dict test_capi.test_watchers
