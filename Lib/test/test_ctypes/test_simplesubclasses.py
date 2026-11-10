@@ -1,6 +1,7 @@
 import unittest
 from collections.abc import Hashable
-from ctypes import Structure, CFUNCTYPE, c_int, _SimpleCData, POINTER
+from ctypes import (Structure, CFUNCTYPE, c_int, c_ushort, c_uint,
+                    c_float, c_double, _SimpleCData, POINTER)
 from ._support import (_CData, PyCSimpleType, Py_TPFLAGS_DISALLOW_INSTANTIATION,
                        Py_TPFLAGS_IMMUTABLETYPE)
 
@@ -71,6 +72,31 @@ class Test(unittest.TestCase):
         PyCSimpleType.__init__(cls, '', (), {'_type_': 'i'})
         self.assertEqual(cls.__ctype_le__.__dict__.get('_type_'), 'i')
         self.assertEqual(cls.__ctype_be__.__dict__.get('_type_'), 'i')
+
+    def test_swapped_simple_type_subclasses(self):
+        for c_type in (c_ushort, c_uint, c_float, c_double):
+            for base in (c_type.__ctype_be__, c_type.__ctype_le__):
+                with self.subTest(base=base):
+                    class Derived(base):
+                        pass
+
+                    class Grandchild(Derived):
+                        pass
+
+                    value = 42
+                    reference = base(value)
+                    for subtype in (Derived, Grandchild):
+                        self.assertEqual(bytes(subtype(value)), bytes(reference))
+                        self.assertEqual(
+                            subtype.from_buffer_copy(bytes(reference)).value,
+                            reference.value)
+                        self.assertEqual(
+                            memoryview(subtype()).format,
+                            memoryview(base()).format)
+                        for attr in ("__ctype_be__", "__ctype_le__"):
+                            self.assertEqual(
+                                bytes(getattr(subtype, attr)(value)),
+                                bytes(getattr(base, attr)(value)))
 
     def test_compare(self):
         self.assertEqual(MyInt(3), MyInt(3))

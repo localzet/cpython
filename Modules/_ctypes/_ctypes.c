@@ -2237,7 +2237,7 @@ static PyMethodDef c_wchar_p_methods[] = {C_WCHAR_P_FROM_PARAM_METHODDEF {0}};
 
 static PyObject *CreateSwappedType(ctypes_state *st, PyTypeObject *type,
                                    PyObject *args, PyObject *kwds,
-                                   PyObject *proto, struct fielddesc *fmt)
+                                   PyObject *proto, struct fielddesc *fmt, int inherited_swapped)
 {
     PyTypeObject *result;
     PyObject *name = PyTuple_GET_ITEM(args, 0);
@@ -2282,8 +2282,8 @@ static PyObject *CreateSwappedType(ctypes_state *st, PyTypeObject *type,
     stginfo->align = fmt->pffi_type->alignment;
     stginfo->length = 0;
     stginfo->size = fmt->pffi_type->size;
-    stginfo->setfunc = fmt->setfunc_swapped;
-    stginfo->getfunc = fmt->getfunc_swapped;
+    stginfo->setfunc = inherited_swapped ? fmt->setfunc : fmt->setfunc_swapped;
+    stginfo->getfunc = inherited_swapped ? fmt->getfunc : fmt->getfunc_swapped;
 
     stginfo->proto = Py_NewRef(proto);
 
@@ -2383,13 +2383,36 @@ PyCSimpleType_init(PyObject *self, PyObject *args, PyObject *kwds)
     stginfo->align = fmt->pffi_type->alignment;
     stginfo->length = 0;
     stginfo->size = fmt->pffi_type->size;
-    stginfo->setfunc = fmt->setfunc;
-    stginfo->getfunc = fmt->getfunc;
+
+    /* Preserve the byte order of a simple type when subclassing it. */
+    StgInfo *baseinfo;
+    if (PyStgInfo_FromType(st,
+                           (PyObject *)((PyTypeObject *)self)->tp_base,
+                           &baseinfo) < 0) {
+        goto error;
+    }
+    int inherited_swapped = 0;
+    if (baseinfo && baseinfo->proto &&
+        fmt->setfunc_swapped && fmt->getfunc_swapped &&
+        baseinfo->setfunc == fmt->setfunc_swapped &&
+        baseinfo->getfunc == fmt->getfunc_swapped) {
+        inherited_swapped = PyObject_RichCompareBool(baseinfo->proto, proto, Py_EQ);
+        if (inherited_swapped < 0) {
+            goto error;
+        }
+    }
+    stginfo->setfunc = inherited_swapped ? fmt->setfunc_swapped : fmt->setfunc;
+    stginfo->getfunc = inherited_swapped ? fmt->getfunc_swapped : fmt->getfunc;
+    if (inherited_swapped) {
+        stginfo->format = _ctypes_alloc_format_string(NULL, baseinfo->format);
+    }
+    else {
 #ifdef WORDS_BIGENDIAN
-    stginfo->format = _ctypes_alloc_format_string_for_type(proto_str, 1);
+        stginfo->format = _ctypes_alloc_format_string_for_type(proto_str, 1);
 #else
-    stginfo->format = _ctypes_alloc_format_string_for_type(proto_str, 0);
+        stginfo->format = _ctypes_alloc_format_string_for_type(proto_str, 0);
 #endif
+    }
     if (stginfo->format == NULL) {
         Py_DECREF(proto);
         return -1;
@@ -2468,7 +2491,7 @@ PyCSimpleType_init(PyObject *self, PyObject *args, PyObject *kwds)
         && fmt->getfunc_swapped)
     {
         PyObject *swapped = CreateSwappedType(st, type, args, kwds,
-                                              proto, fmt);
+                                              proto, fmt, inherited_swapped);
         if (swapped == NULL) {
             return -1;
         }
@@ -2479,32 +2502,28 @@ PyCSimpleType_init(PyObject *self, PyObject *args, PyObject *kwds)
         }
         assert(sw_info);
 #ifdef WORDS_BIGENDIAN
-        if (PyObject_SetAttrString(self, "__ctype_le__", swapped) < 0 ||
-            PyObject_SetAttrString(self, "__ctype_be__", self) < 0 ||
-            PyObject_SetAttrString(swapped, "__ctype_be__", self) < 0 ||
-            PyObject_SetAttrString(swapped, "__ctype_le__", swapped) < 0)
-       {
-            Py_DECREF(swapped);
-            return -1;
-        }
-        /* We are creating the type for the OTHER endian */
-        sw_info->format = _ctypes_alloc_format_string("<", stginfo->format+1);
+        PyObject *big_type = inherited_swapped ? swapped : self;
+        PyObject *little_type = inherited_swapped ? self : swapped;
+        sw_info->format = inherited_swapped
+            ? _ctypes_alloc_format_string_for_type(proto_str, 1)
+            : _ctypes_alloc_format_string("<", stginfo->format + 1);
 #else
-        if (PyObject_SetAttrString(self, "__ctype_be__", swapped) < 0 ||
-            PyObject_SetAttrString(self, "__ctype_le__", self) < 0 ||
-            PyObject_SetAttrString(swapped, "__ctype_le__", self) < 0 ||
-            PyObject_SetAttrString(swapped, "__ctype_be__", swapped) < 0)
+        PyObject *big_type = inherited_swapped ? self : swapped;
+        PyObject *little_type = inherited_swapped ? swapped : self;
+        sw_info->format = inherited_swapped
+            ? _ctypes_alloc_format_string_for_type(proto_str, 0)
+            : _ctypes_alloc_format_string(">", stginfo->format + 1);
+#endif
+        if (sw_info->format == NULL ||
+            PyObject_SetAttrString(self, "__ctype_le__", little_type) < 0 ||
+            PyObject_SetAttrString(self, "__ctype_be__", big_type) < 0 ||
+            PyObject_SetAttrString(swapped, "__ctype_be__", big_type) < 0 ||
+            PyObject_SetAttrString(swapped, "__ctype_le__", little_type) < 0)
         {
             Py_DECREF(swapped);
             return -1;
         }
-        /* We are creating the type for the OTHER endian */
-        sw_info->format = _ctypes_alloc_format_string(">", stginfo->format+1);
-#endif
         Py_DECREF(swapped);
-        if (sw_info->format == NULL) {
-            return -1;
-        }
     };
 
     return 0;
