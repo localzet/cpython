@@ -1,0 +1,1 @@
+Preserve byte order and buffer formats when subclassing a :mod:`ctypes` simple type with swapped endianness.
