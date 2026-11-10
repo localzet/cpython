@@ -1,0 +1,54 @@
+name: Verify swapped ctypes simple subclasses (fork only)
+
+on:
+  push:
+    branches:
+      - contrib/gh-95384-swapped-simple-subclasses
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regular:
+    name: Regular build and ctypes tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and test
+        run: |
+          ./configure --without-ensurepip
+          make -j4
+          ./python -m test -j2 test_ctypes test_struct
+
+  debug:
+    name: Debug build, ctypes tests and reference leaks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and test
+        run: |
+          ./configure --with-pydebug --without-ensurepip
+          make -j4
+          ./python -m test -j2 test_ctypes test_struct
+          ./python -m test -R 3:3 test_ctypes.test_simplesubclasses
+
+  free-threaded:
+    name: Free-threaded debug build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and test
+        run: |
+          ./configure --with-pydebug --disable-gil --without-ensurepip
+          make -j4
+          ./python -m test -j2 test_ctypes test_struct
