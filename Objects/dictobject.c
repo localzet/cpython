@@ -134,6 +134,71 @@ As a consequence of this, split keys have a maximum size of 16.
 
 #include "stringlib/eq.h"                // unicode_eq()
 #include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+/* Temporary research-only counters for copies in copy_lock_held_untracked().
+   These do not count dict(d) and dictionary unpacking. */
+static struct {
+    unsigned long long total;
+    unsigned long long empty;
+    unsigned long long split;
+    unsigned long long compact;
+    unsigned long long light_deletions;
+    unsigned long long sparse;
+    unsigned long long sparse_large;
+    unsigned long long very_sparse;
+} dict_copy_profile;
+
+static void
+report_dict_copy_profile(void)
+{
+    fprintf(stderr, "DICT_COPY_PROFILE total=%llu empty=%llu split=%llu "
+                    "compact=%llu light_deletions=%llu sparse=%llu "
+                    "sparse_large=%llu very_sparse=%llu\n",
+            dict_copy_profile.total, dict_copy_profile.empty,
+            dict_copy_profile.split, dict_copy_profile.compact,
+            dict_copy_profile.light_deletions,
+            dict_copy_profile.sparse, dict_copy_profile.sparse_large,
+            dict_copy_profile.very_sparse);
+}
+
+static void
+record_dict_copy_profile(PyDictObject *mp)
+{
+    static int registered = 0;
+    if (!registered) {
+        registered = 1;
+        (void)atexit(report_dict_copy_profile);
+    }
+    dict_copy_profile.total++;
+    if (mp->ma_used == 0) {
+        dict_copy_profile.empty++;
+        return;
+    }
+    if (mp->ma_values != NULL) {
+        dict_copy_profile.split++;
+        return;
+    }
+    Py_ssize_t n = mp->ma_keys->dk_nentries;
+    Py_ssize_t used = mp->ma_used;
+    if (n == used) {
+        dict_copy_profile.compact++;
+    }
+    else if (used >= (n * 2) / 3) {
+        dict_copy_profile.light_deletions++;
+    }
+    else {
+        dict_copy_profile.sparse++;
+        if (n >= 64) {
+            dict_copy_profile.sparse_large++;
+        }
+        if (used < n / 16) {
+            dict_copy_profile.very_sparse++;
+        }
+    }
+}
+
 
 // Forward declarations
 static PyObject* frozendict_new(PyTypeObject *type, PyObject *args,
@@ -4573,6 +4638,7 @@ copy_lock_held_untracked(PyObject *o, int as_frozendict)
     }
 
     mp = (PyDictObject *)o;
+    record_dict_copy_profile(mp);
     if (mp->ma_used == 0) {
         /* The dict is empty; just return a new dict. */
         PyObject *d;
