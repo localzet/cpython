@@ -467,11 +467,10 @@ class DictTest(unittest.TestCase):
 
     def test_copy_noncompact(self):
         # Dicts don't compact themselves on del/pop operations.
-        # Copy uses a slow merging strategy that produces a
-        # compacted copy when fewer than about 1/64 of the original
-        # entries remain (to avoid scanning mostly deleted entries).
-        # In this test we want to hit the slow/compacting
-        # branch of dict.copy() and make sure it works OK.
+        # Copy used to take a slow merging path when about a third
+        # of the entries were deleted. The compact clone now skips
+        # deleted entries directly, even when very few keys remain.
+        # Check that an almost emptied dict is copied and compacted.
         d = {k: k for k in range(1000)}
         for k in range(999):
             del d[k]
@@ -495,6 +494,37 @@ class DictTest(unittest.TestCase):
                             self.assertIs(copied, value)
                         result.clear()
                         self.assertEqual(list(source.items()), expected)
+
+    def test_sparse_dict_copy_deletion_patterns(self):
+        from random import Random
+
+        for key_type in (str, int):
+            keys = [key_type(i) for i in range(1000)]
+            for remaining in (1, 15, 100, 500):
+                for pattern in ("front", "back", "middle", "random"):
+                    with self.subTest(key_type=key_type, remaining=remaining,
+                                      pattern=pattern):
+                        if pattern == "front":
+                            deleted = keys[:1000 - remaining]
+                        elif pattern == "back":
+                            deleted = keys[remaining:]
+                        elif pattern == "middle":
+                            start = remaining // 2
+                            deleted = keys[start:start + 1000 - remaining]
+                        else:
+                            deleted = keys.copy()
+                            Random(161524).shuffle(deleted)
+                            deleted = deleted[:1000 - remaining]
+
+                        source = dict.fromkeys(keys, object())
+                        for key in deleted:
+                            del source[key]
+                        expected = list(source.items())
+                        for copy in (source.copy(), dict(source), {**source}):
+                            self.assertEqual(list(copy.items()), expected)
+                            self.assertEqual(len(copy), remaining)
+                            copy.clear()
+                            self.assertEqual(list(source.items()), expected)
 
     def test_sparse_dict_copy_reinserted_keys(self):
         for keys in ([f'key{i}' for i in range(120)], list(range(120))):
@@ -560,7 +590,7 @@ class DictTest(unittest.TestCase):
         self.assertIsNone(key_ref())
         self.assertIsNone(value_ref())
 
-    def test_sparse_dict_copy_threshold(self):
+    def test_sparse_dict_copy_density(self):
         for key_type in (str, int):
             for remaining in (1, 10, 14, 15, 16, 17, 30, 31, 32, 33, 500):
                 with self.subTest(key_type=key_type, remaining=remaining):

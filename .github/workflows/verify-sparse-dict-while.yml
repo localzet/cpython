@@ -1,0 +1,60 @@
+name: Verify sparse dict while-loop (fork only)
+
+on:
+  push:
+    branches:
+      - verify/gh-161524-while-no-guard
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  debug:
+    name: Debug, reference leaks, patterned and stress tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and verify
+        run: |
+          ./configure --with-pydebug --without-ensurepip
+          make -j4
+          ./python -m test -j2 test_dict test_capi.test_dict test_capi.test_watchers
+          ./python -m test -R 3:3 test_dict test_capi.test_dict test_capi.test_watchers
+          ./python Tools/scripts/stress_sparse_dict_copy.py
+          ./python Tools/scripts/bench_sparse_dict_patterns.py > /dev/null
+
+  free-threaded:
+    name: Debug free-threaded
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and verify
+        run: |
+          ./configure --with-pydebug --disable-gil --without-ensurepip
+          make -j4
+          ./python -m test -j2 test_dict test_capi.test_dict test_capi.test_watchers
+          ./python Tools/scripts/stress_sparse_dict_copy.py
+
+  asan:
+    name: AddressSanitizer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      CC: clang
+      ASAN_OPTIONS: detect_leaks=0:allocator_may_return_null=1:halt_on_error=1:handle_segv=0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and verify
+        run: |
+          ./configure --with-pydebug --with-address-sanitizer --without-pymalloc --without-ensurepip
+          make -j4
+          ./python -m test -j2 test_dict test_capi.test_dict test_capi.test_watchers

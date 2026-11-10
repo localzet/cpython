@@ -4297,14 +4297,6 @@ PyDict_MergeFromSeq2(PyObject *d, PyObject *seq2, int override)
 }
 
 
-/* The generic merge visits only live entries, so it is faster when
-   very few entries remain in the original table. */
-static inline bool
-can_clone_sparse_dict(PyDictObject *mp)
-{
-    return mp->ma_used >= mp->ma_keys->dk_nentries / 64;
-}
-
 /* Clone only live entries from a combined table, preserving insertion order.
    The source is locked while its keys and values are referenced. */
 static PyDictKeysObject *
@@ -4331,12 +4323,14 @@ clone_compact_dict_keys(PyDictObject *orig)
     if (unicode) {
         PyDictUnicodeEntry *src = DK_UNICODE_ENTRIES(oldkeys);
         PyDictUnicodeEntry *dst = DK_UNICODE_ENTRIES(keys);
-        for (Py_ssize_t i = 0; i < oldkeys->dk_nentries; i++) {
-            if (src[i].me_value != NULL) {
-                dst[n].me_key = Py_NewRef(src[i].me_key);
-                dst[n].me_value = Py_NewRef(src[i].me_value);
-                n++;
+        for (Py_ssize_t i = 0; n < used; i++) {
+            while (src[i].me_value == NULL) {
+                i++;
             }
+            assert(i < oldkeys->dk_nentries);
+            dst[n].me_key = Py_NewRef(src[i].me_key);
+            dst[n].me_value = Py_NewRef(src[i].me_value);
+            n++;
         }
         assert(n == used);
         build_indices_unicode(keys, dst, n);
@@ -4344,13 +4338,15 @@ clone_compact_dict_keys(PyDictObject *orig)
     else {
         PyDictKeyEntry *src = DK_ENTRIES(oldkeys);
         PyDictKeyEntry *dst = DK_ENTRIES(keys);
-        for (Py_ssize_t i = 0; i < oldkeys->dk_nentries; i++) {
-            if (src[i].me_value != NULL) {
-                dst[n].me_key = Py_NewRef(src[i].me_key);
-                dst[n].me_hash = src[i].me_hash;
-                dst[n].me_value = Py_NewRef(src[i].me_value);
-                n++;
+        for (Py_ssize_t i = 0; n < used; i++) {
+            while (src[i].me_value == NULL) {
+                i++;
             }
+            assert(i < oldkeys->dk_nentries);
+            dst[n].me_key = Py_NewRef(src[i].me_key);
+            dst[n].me_hash = src[i].me_hash;
+            dst[n].me_value = Py_NewRef(src[i].me_value);
+            n++;
         }
         assert(n == used);
         build_indices_generic(keys, dst, n);
@@ -4380,8 +4376,7 @@ dict_dict_merge(PyDictObject *mp, PyDictObject *other, int override, PyObject **
         PyDictKeysObject *okeys = other->ma_keys;
 
         // Clone a combined table directly, compacting deleted entries.
-        if (mp->ma_values == NULL && other->ma_values == NULL &&
-            can_clone_sparse_dict(other)) {
+        if (mp->ma_values == NULL && other->ma_values == NULL) {
             _PyDict_NotifyEvent(PyDict_EVENT_CLONED, mp, (PyObject *)other, NULL);
             PyDictKeysObject *keys;
             if (other->ma_used == okeys->dk_nentries &&
@@ -4687,8 +4682,7 @@ copy_lock_held_untracked(PyObject *o, int as_frozendict)
         return (PyObject *)split_copy;
     }
 
-    if (Py_TYPE(mp)->tp_iter == dict_iter &&
-        mp->ma_values == NULL && can_clone_sparse_dict(mp))
+    if (Py_TYPE(mp)->tp_iter == dict_iter && mp->ma_values == NULL)
     {
         /* Clone compact tables as-is, but omit deleted entries from sparse
            tables so copying an almost emptied dict stays inexpensive. */
