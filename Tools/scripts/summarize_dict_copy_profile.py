@@ -9,10 +9,11 @@ from pathlib import Path
 
 FIELDS = ("total", "empty", "split", "compact", "light_deletions",
           "sparse", "sparse_large", "very_sparse")
+MERGE_FIELDS = ("merge_candidates", "merge_sparse", "merge_sparse_large")
 
 
 def summarize(path):
-    counts = {name: 0 for name in FIELDS}
+    counts = {name: 0 for name in (*FIELDS, *MERGE_FIELDS)}
     processes = 0
     if not path.exists():
         print(f"{path}: no instrumentation output")
@@ -27,6 +28,8 @@ def summarize(path):
         processes += 1
         for name in FIELDS:
             counts[name] += values[name]
+        for name in MERGE_FIELDS:
+            counts[name] += values.get(name, 0)
     total = counts["total"]
     percent = counts["sparse"] * 100 / total if total else 0
     print(f"{path}: processes={processes}, total={total}, "
@@ -35,7 +38,10 @@ def summarize(path):
           f"very_sparse={counts['very_sparse']}, "
           f"compact={counts['compact']}, "
           f"light_deletions={counts['light_deletions']}, "
-          f"empty={counts['empty']}, split={counts['split']}")
+          f"empty={counts['empty']}, split={counts['split']}, "
+          f"merge_candidates={counts['merge_candidates']}, "
+          f"merge_sparse={counts['merge_sparse']}, "
+          f"merge_sparse_large={counts['merge_sparse_large']}")
 
 
 if __name__ == "__main__":
