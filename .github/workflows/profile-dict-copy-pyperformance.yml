@@ -3,7 +3,7 @@ name: Profile dict.copy() frequency in pyperformance (fork only)
 on:
   push:
     branches:
-      - research/gh-161524-pyperformance-profile
+      - research/gh-161524-profile-merge-candidates
   workflow_dispatch:
 
 permissions:
