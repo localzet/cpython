@@ -1,0 +1,53 @@
+name: Compare sparse dict stdlib workloads with PGO/LTO (fork only)
+
+on:
+  push:
+    branches:
+      - research/gh-161524-stdlib-pgo
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pgo:
+    name: Base vs compact clone (GCC PGO/LTO)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CC: gcc
+      CXX: g++
+    steps:
+      - name: Checkout research script and patched interpreter
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: research/gh-161524-stdlib-pgo
+          path: patched
+          persist-credentials: false
+      - name: Checkout pre-patch CPython
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 4575fb91eab84ec8ee02b7cad7c38b309006a010
+          path: baseline
+          persist-credentials: false
+      - name: Build patched interpreter (PGO/LTO)
+        working-directory: patched
+        run: |
+          ./configure --enable-optimizations --with-lto --without-ensurepip
+          make -j4
+          ./python -m test -j2 test_dict test_capi.test_dict test_capi.test_watchers
+      - name: Build base interpreter (PGO/LTO)
+        working-directory: baseline
+        run: |
+          ./configure --enable-optimizations --with-lto --without-ensurepip
+          make -j4
+      - name: Benchmark in ABBA order
+        run: |
+          echo '=== BASELINE 1 ==='
+          (cd baseline && ./python ../patched/Tools/scripts/bench_sparse_dict_realworld.py)
+          echo '=== PATCHED 1 ==='
+          (cd patched && ./python Tools/scripts/bench_sparse_dict_realworld.py)
+          echo '=== PATCHED 2 ==='
+          (cd patched && ./python Tools/scripts/bench_sparse_dict_realworld.py)
+          echo '=== BASELINE 2 ==='
+          (cd baseline && ./python ../patched/Tools/scripts/bench_sparse_dict_realworld.py)
