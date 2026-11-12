@@ -1,0 +1,143 @@
+name: Sparse dict copy against current main (fork only)
+
+on:
+  push:
+    branches:
+      - research/gh-161524-current-main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    name: Base vs patch (${{ matrix.build }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [regular, pgo-lto]
+    env:
+      MAIN_SHA: 020c5f3b3867b0d392fd8b2586435b4018ccdf8a
+      OLD_BASE: 4575fb91eab84ec8ee02b7cad7c38b309006a010
+      PR_SHA: 3595cf8997002fcfa9c612466fff0e4f37ab202e
+      PYTHONHASHSEED: '0'
+      CC: gcc
+      CXX: g++
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prepare identical main trees, with and without the PR
+        run: |
+          git fetch --no-tags https://github.com/python/cpython.git "$MAIN_SHA"
+          git worktree add --detach "$RUNNER_TEMP/baseline" "$MAIN_SHA"
+          git worktree add --detach "$RUNNER_TEMP/patched" "$MAIN_SHA"
+          git diff --binary "$OLD_BASE" "$PR_SHA" -- Objects/dictobject.c Lib/test/test_dict.py Lib/test/test_capi/test_watchers.py Misc/NEWS.d/next/Core_and_Builtins > "$RUNNER_TEMP/pr.patch"
+          git -C "$RUNNER_TEMP/patched" apply --check "$RUNNER_TEMP/pr.patch"
+          git -C "$RUNNER_TEMP/patched" apply "$RUNNER_TEMP/pr.patch"
+          git -C "$RUNNER_TEMP/patched" diff --stat
+          echo "Both source trees are based on $MAIN_SHA; only the second has the PR applied."
+      - name: Build main and main plus patch
+        shell: bash
+        run: |
+          flags=(--without-ensurepip)
+          if [[ "${{ matrix.build }}" == pgo-lto ]]; then
+            flags+=(--enable-optimizations --with-lto)
+          fi
+          gcc --version
+          for variant in baseline patched; do
+            (
+              cd "$RUNNER_TEMP/$variant"
+              ./configure "${flags[@]}"
+              make -j4
+              ./python -VV
+            )
+          done
+      - name: Run focused regression suites
+        working-directory: ${{ runner.temp }}/patched
+        run: ./python -m test -j2 test_dict test_capi.test_dict test_capi.test_watchers
+      - name: Benchmark both builds in A-B-B-A order
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/bench.py" <<'PY'
+          import json
+          import statistics
+          import sys
+          import timeit
+
+          CASES = [
+              (1_000, 1_000, "dense"),
+              (100_000, 100_000, "dense"),
+              (1_000, 100, "front"),
+              (100_000, 70_000, "front"),
+              (100_000, 30_000, "front"),
+              (100_000, 1_000, "front"),
+              (100_000, 1_000, "back"),
+              (100_000, 1_000, "spread"),
+              (100_000, 1, "front"),
+              (100_000, 1, "back"),
+          ]
+
+          results = {}
+          for key_type in (str, int):
+              for total, live, pattern in CASES:
+                  keys = [key_type(i) for i in range(total)]
+                  d = dict(zip(keys, range(total)))
+                  if pattern == "front":
+                      for key in keys[:total - live]:
+                          del d[key]
+                  elif pattern == "back":
+                      for key in keys[live:]:
+                          del d[key]
+                  elif pattern == "spread":
+                      keep = {i * total // live for i in range(live)}
+                      for i, key in enumerate(keys):
+                          if i not in keep:
+                              del d[key]
+                  assert len(d) == live
+                  for operation, call in (("copy", d.copy),
+                                          ("dict", lambda: dict(d))):
+                      timer = timeit.Timer(call)
+                      number, _ = timer.autorange()
+                      samples = [t / number * 1e6 for t in
+                                 timer.repeat(repeat=5, number=number)]
+                      label = f"{key_type.__name__} {live}/{total} {pattern} {operation}"
+                      results[label] = {"median_us": statistics.median(samples),
+                                        "samples_us": samples, "loops": number}
+                      print(f"{label}: {results[label]['median_us']:.3f} us/op")
+          with open(sys.argv[1], "w") as f:
+              json.dump(results, f, indent=2)
+          PY
+          for pass in baseline-1 patched-1 patched-2 baseline-2; do
+            variant="${pass%-*}"
+            (
+              cd "$RUNNER_TEMP/$variant"
+              ./python "$RUNNER_TEMP/bench.py" "$RUNNER_TEMP/$pass.json"
+            )
+          done
+      - name: Report comparison
+        run: |
+          python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"])
+          def read(name):
+              return json.loads((root / (name + ".json")).read_text())
+
+          a1, b1, b2, a2 = map(read, ("baseline-1", "patched-1", "patched-2", "baseline-2"))
+          print("Main:", os.environ["MAIN_SHA"])
+          print("PR:", os.environ["PR_SHA"])
+          print("")
+          print("| Case | main A1 | main A2 | patch B1 | patch B2 | Main/patch |")
+          print("| --- | ---: | ---: | ---: | ---: | ---: |")
+          for case in a1:
+              a, c, b, d = (x[case]["median_us"] for x in (a1, a2, b1, b2))
+              print(f"| {case} | {a:.3f} | {c:.3f} | {b:.3f} | {d:.3f} | {(a+c)/(b+d):.3f}x |")
+          print("")
+          print("Times in microseconds per operation. Ratio compares the means of the two pass medians.")
+          PY
