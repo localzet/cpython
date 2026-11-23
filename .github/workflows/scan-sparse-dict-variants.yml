@@ -1,0 +1,151 @@
+name: Sparse dict scan variants (fork only)
+
+on:
+  push:
+    branches:
+      - research/gh-161524-current-main
+    paths:
+      - .github/workflows/scan-sparse-dict-variants.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    name: Scan variants (${{ matrix.optimization }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        optimization: [regular, pgo-lto]
+    env:
+      MAIN_SHA: 22691a32b122cff3ad17460c068f70e806cd7e84
+      PR_BASE: 4575fb91eab84ec8ee02b7cad7c38b309006a010
+      PR_SHA: 3595cf8997002fcfa9c612466fff0e4f37ab202e
+      PYTHONHASHSEED: '0'
+      CC: gcc
+      CXX: g++
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up main, current PR, and linear-scan variant
+        shell: bash
+        run: |
+          git fetch --no-tags https://github.com/python/cpython.git "$MAIN_SHA"
+          for variant in main current linear; do
+            git worktree add --detach "$RUNNER_TEMP/$variant" "$MAIN_SHA"
+          done
+          git diff --binary "$PR_BASE" "$PR_SHA" -- Objects/dictobject.c Lib/test/test_dict.py Lib/test/test_capi/test_watchers.py Misc/NEWS.d/next/Core_and_Builtins > "$RUNNER_TEMP/pr.patch"
+          for variant in current linear; do
+            git -C "$RUNNER_TEMP/$variant" apply --check "$RUNNER_TEMP/pr.patch"
+            git -C "$RUNNER_TEMP/$variant" apply "$RUNNER_TEMP/pr.patch"
+          done
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          path = Path(os.environ["RUNNER_TEMP"]) / "linear/Objects/dictobject.c"
+          src = path.read_text()
+          old = """for (Py_ssize_t i = 0; n < used; i++) {
+                  while (src[i].me_value == NULL) {
+                      i++;
+                  }
+                  assert(i < oldkeys->dk_nentries);"""
+          new = """for (Py_ssize_t i = 0; i < oldkeys->dk_nentries && n < used; i++) {
+                  if (src[i].me_value == NULL) {
+                      continue;
+                  }"""
+          assert src.count(old) == 2, src.count(old)
+          path.write_text(src.replace(old, new))
+          PY
+          git -C "$RUNNER_TEMP/linear" diff --stat
+          git -C "$RUNNER_TEMP/linear" diff -- Objects/dictobject.c | tail -90
+      - name: Build the three variants
+        shell: bash
+        run: |
+          opts=(--without-ensurepip)
+          if [[ "${{ matrix.optimization }}" == pgo-lto ]]; then
+            opts+=(--enable-optimizations --with-lto)
+          fi
+          for variant in main current linear; do
+            (
+              cd "$RUNNER_TEMP/$variant"
+              ./configure "${opts[@]}" >/dev/null
+              make -j4 >/dev/null
+              ./python -VV
+            )
+          done
+      - name: Run relevant tests
+        working-directory: ${{ runner.temp }}/linear
+        run: ./python -m test -j2 test_dict test_capi.test_dict test_capi.test_watchers
+      - name: Benchmark, mirrored order to control drift
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/bench.py" <<'PY'
+          import json
+          import statistics
+          import sys
+          import timeit
+
+          cases = [
+              (1000, 1000, "dense"),
+              (100000, 100000, "dense"),
+              (1000, 100, "front"),
+              (100000, 30000, "front"),
+              (100000, 1000, "front"),
+              (100000, 1000, "back"),
+              (100000, 1000, "spread"),
+              (100000, 1, "front"),
+              (100000, 1, "back"),
+          ]
+          out = {}
+          for make_key in (str, int):
+              for size, live, pattern in cases:
+                  keys = [make_key(i) for i in range(size)]
+                  d = dict(zip(keys, range(size)))
+                  if pattern == "front":
+                      for key in keys[:size-live]:
+                          del d[key]
+                  elif pattern == "back":
+                      for key in keys[live:]:
+                          del d[key]
+                  elif pattern == "spread":
+                      keep = {i*size//live for i in range(live)}
+                      for i, key in enumerate(keys):
+                          if i not in keep:
+                              del d[key]
+                  assert len(d) == live
+                  for name, op in (("copy", d.copy), ("dict", lambda: dict(d))):
+                      timer = timeit.Timer(op)
+                      loops, _ = timer.autorange()
+                      times = [t/loops*1e6 for t in timer.repeat(repeat=5, number=loops)]
+                      key = f"{make_key.__name__} {live}/{size} {pattern} {name}"
+                      out[key] = {"median_us": statistics.median(times), "samples_us":times}
+          with open(sys.argv[1], "w") as f:
+              json.dump(out, f, indent=2)
+          PY
+          for pass in main-1 current-1 linear-1 linear-2 current-2 main-2; do
+            variant="${pass%-*}"
+            (cd "$RUNNER_TEMP/$variant" && ./python "$RUNNER_TEMP/bench.py" "$RUNNER_TEMP/$pass.json")
+          done
+      - name: Results
+        shell: bash
+        run: |
+          python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
+          import json
+          import os
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"])
+          load = lambda variant: [json.loads((root/f"{variant}-{i}.json").read_text()) for i in (1, 2)]
+          main, cur, lin = (load(k) for k in ("main","current","linear"))
+          print("Main SHA:", os.environ["MAIN_SHA"])
+          print("| Case | main us | PR us | linear us | linear / PR speedup |")
+          print("| --- | ---: | ---: | ---: | ---: |")
+          for case in main[0]:
+              vals = [sum(x[case]["median_us"] for x in variant)/2 for variant in (main,cur,lin)]
+              print(f"| {case} | {vals[0]:.3f} | {vals[1]:.3f} | {vals[2]:.3f} | {vals[1]/vals[2]:.3f}x |")
+          print("All times in microseconds per operation; means of two pass medians.")
+          PY
