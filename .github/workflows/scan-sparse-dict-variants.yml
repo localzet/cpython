@@ -50,14 +50,14 @@ jobs:
           path = Path(os.environ["RUNNER_TEMP"]) / "linear/Objects/dictobject.c"
           src = path.read_text()
           old = """for (Py_ssize_t i = 0; n < used; i++) {
-                  while (src[i].me_value == NULL) {
-                      i++;
-                  }
-                  assert(i < oldkeys->dk_nentries);"""
+                      while (src[i].me_value == NULL) {
+                          i++;
+                      }
+                      assert(i < oldkeys->dk_nentries);"""
           new = """for (Py_ssize_t i = 0; i < oldkeys->dk_nentries && n < used; i++) {
-                  if (src[i].me_value == NULL) {
-                      continue;
-                  }"""
+                      if (src[i].me_value == NULL) {
+                          continue;
+                      }"""
           assert src.count(old) == 2, src.count(old)
           path.write_text(src.replace(old, new))
           PY
