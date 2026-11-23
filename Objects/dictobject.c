@@ -4323,14 +4323,31 @@ clone_compact_dict_keys(PyDictObject *orig)
     if (unicode) {
         PyDictUnicodeEntry *src = DK_UNICODE_ENTRIES(oldkeys);
         PyDictUnicodeEntry *dst = DK_UNICODE_ENTRIES(keys);
-        for (Py_ssize_t i = 0; n < used; i++) {
-            while (src[i].me_value == NULL) {
-                i++;
+        Py_ssize_t nentries = oldkeys->dk_nentries;
+        // For a heavily front-deleted table, visit live entries from the end.
+        // Fill the destination backwards to preserve insertion order.
+        if (nentries >= 16 && src[0].me_value == NULL &&
+            src[15].me_value == NULL && src[nentries - 1].me_value != NULL) {
+            Py_ssize_t i = nentries - 1;
+            for (Py_ssize_t j = used - 1; j >= 0; j--, i--) {
+                while (src[i].me_value == NULL) {
+                    i--;
+                }
+                dst[j].me_key = Py_NewRef(src[i].me_key);
+                dst[j].me_value = Py_NewRef(src[i].me_value);
             }
-            assert(i < oldkeys->dk_nentries);
-            dst[n].me_key = Py_NewRef(src[i].me_key);
-            dst[n].me_value = Py_NewRef(src[i].me_value);
-            n++;
+            n = used;
+        }
+        else {
+            for (Py_ssize_t i = 0; n < used; i++) {
+                while (src[i].me_value == NULL) {
+                    i++;
+                }
+                assert(i < oldkeys->dk_nentries);
+                dst[n].me_key = Py_NewRef(src[i].me_key);
+                dst[n].me_value = Py_NewRef(src[i].me_value);
+                n++;
+            }
         }
         assert(n == used);
         build_indices_unicode(keys, dst, n);
@@ -4338,15 +4355,33 @@ clone_compact_dict_keys(PyDictObject *orig)
     else {
         PyDictKeyEntry *src = DK_ENTRIES(oldkeys);
         PyDictKeyEntry *dst = DK_ENTRIES(keys);
-        for (Py_ssize_t i = 0; n < used; i++) {
-            while (src[i].me_value == NULL) {
-                i++;
+        Py_ssize_t nentries = oldkeys->dk_nentries;
+        // For a heavily front-deleted table, visit live entries from the end.
+        // Fill the destination backwards to preserve insertion order.
+        if (nentries >= 16 && src[0].me_value == NULL &&
+            src[15].me_value == NULL && src[nentries - 1].me_value != NULL) {
+            Py_ssize_t i = nentries - 1;
+            for (Py_ssize_t j = used - 1; j >= 0; j--, i--) {
+                while (src[i].me_value == NULL) {
+                    i--;
+                }
+                dst[j].me_key = Py_NewRef(src[i].me_key);
+                dst[j].me_hash = src[i].me_hash;
+                dst[j].me_value = Py_NewRef(src[i].me_value);
             }
-            assert(i < oldkeys->dk_nentries);
-            dst[n].me_key = Py_NewRef(src[i].me_key);
-            dst[n].me_hash = src[i].me_hash;
-            dst[n].me_value = Py_NewRef(src[i].me_value);
-            n++;
+            n = used;
+        }
+        else {
+            for (Py_ssize_t i = 0; n < used; i++) {
+                while (src[i].me_value == NULL) {
+                    i++;
+                }
+                assert(i < oldkeys->dk_nentries);
+                dst[n].me_key = Py_NewRef(src[i].me_key);
+                dst[n].me_hash = src[i].me_hash;
+                dst[n].me_value = Py_NewRef(src[i].me_value);
+                n++;
+            }
         }
         assert(n == used);
         build_indices_generic(keys, dst, n);
