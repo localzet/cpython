@@ -479,7 +479,7 @@ class DictTest(unittest.TestCase):
             with self.subTest(key_type=type(keys[0])):
                 d = dict(zip(keys, range(100)))
                 for i, key in enumerate(keys):
-                    if i not in (1, 50, 98):
+                    if i not in (1, 50, 99):
                         del d[key]
                 expected = list(d.items())
                 if isinstance(keys[0], Key):
